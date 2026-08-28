@@ -1,0 +1,1789 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; style-src 'unsafe-inline' blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; img-src blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; font-src blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; media-src blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; worker-src blob:; connect-src blob: data:; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<title>校园二手交易平台｜番茄票根页面设计参考</title>
+<style>:root{color-scheme:light dark;background:light-dark(rgb(255 255 255), rgb(24 24 24))}html,body{margin:0}body{box-sizing:border-box;padding:1rem;background:inherit}iframe{display:block;width:100%;height:calc(100vh - 2rem);margin:0 auto;border:0}</style>
+</head>
+<body>
+<iframe sandbox="allow-scripts" referrerpolicy="no-referrer" title="校园二手交易平台番茄票根页面设计参考" srcdoc="&lt;!doctype html&gt;
+&lt;html lang=&quot;zh-CN&quot;&gt;
+&lt;head&gt;
+&lt;meta charset=&quot;utf-8&quot;&gt;
+&lt;meta name=&quot;viewport&quot; content=&quot;width=device-width, initial-scale=1&quot;&gt;
+&lt;meta name=&quot;referrer&quot; content=&quot;no-referrer&quot;&gt;
+&lt;meta http-equiv=&quot;Content-Security-Policy&quot; content=&quot;default-src &#x27;none&#x27;; script-src &#x27;unsafe-inline&#x27; &#x27;unsafe-eval&#x27; &#x27;wasm-unsafe-eval&#x27; blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; style-src &#x27;unsafe-inline&#x27; blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; img-src blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; font-src blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; media-src blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; worker-src blob:; connect-src blob: data:; frame-src &#x27;none&#x27;; object-src &#x27;none&#x27;; base-uri &#x27;none&#x27;; form-action &#x27;none&#x27;&quot;&gt;
+&lt;title&gt;校园二手交易平台｜番茄票根页面设计参考&lt;/title&gt;
+&lt;style&gt;:root {
+  color-scheme: light dark;
+  background-color: var(
+    --background,
+    var(--color-background-primary, light-dark(rgb(255 255 255), rgb(24 24 24)))
+  ) !important;
+
+  /* Agent-facing contract; keep in sync with SKILL.md. */
+  --background: var(
+    --color-background-primary,
+    light-dark(rgb(255 255 255), rgb(24 24 24))
+  );
+  --foreground: var(
+    --color-text-primary,
+    light-dark(rgb(26 28 31), rgb(255 255 255))
+  );
+  --card: color-mix(in oklab, var(--foreground) 5%, var(--background));
+  --card-foreground: var(
+    --color-text-primary,
+    light-dark(rgb(26 28 31), rgb(255 255 255))
+  );
+  --popover: var(
+    --color-background-secondary,
+    light-dark(rgb(255 255 255), rgb(45 45 45))
+  );
+  --popover-foreground: var(
+    --color-text-primary,
+    light-dark(rgb(26 28 31), rgb(255 255 255))
+  );
+  --primary: var(
+    --color-text-info,
+    light-dark(rgb(51 156 255), rgb(131 195 255))
+  );
+  --primary-foreground: var(
+    --color-text-inverse,
+    light-dark(rgb(255 255 255), rgb(13 13 13))
+  );
+  --secondary: var(
+    --color-background-secondary,
+    light-dark(rgb(255 255 255 / 96%), rgb(54 54 54 / 96%))
+  );
+  --secondary-foreground: var(
+    --color-text-primary,
+    light-dark(rgb(26 28 31), rgb(255 255 255))
+  );
+  --muted: color-mix(in srgb, var(--foreground) 10%, transparent);
+  --muted-foreground: var(
+    --color-text-secondary,
+    light-dark(rgb(26 28 31 / 49.4%), rgb(255 255 255 / 49.8%))
+  );
+  --accent: var(
+    --color-background-info,
+    light-dark(rgb(229 242 255), rgb(13 39 63))
+  );
+  --accent-foreground: var(
+    --color-text-info,
+    light-dark(rgb(51 156 255), rgb(131 195 255))
+  );
+  --destructive: var(
+    --color-text-warning,
+    light-dark(rgb(226 85 7), rgb(255 133 73))
+  );
+  --border: var(
+    --color-border-secondary,
+    light-dark(rgb(26 28 31 / 8%), rgb(255 255 255 / 8.2%))
+  );
+  --input: var(
+    --color-border-primary,
+    light-dark(
+      rgb(26 28 31 / 11.8%),
+      color-mix(in oklab, rgb(0 0 0) 10%, transparent)
+    )
+  );
+  --ring: var(
+    --color-ring-primary,
+    light-dark(rgb(51 156 255), rgb(131 195 255 / 76%))
+  );
+  --font-size-base: var(--font-text-md-size, 14px);
+  --blue: light-dark(rgb(51 156 255), rgb(51 156 255));
+  --orange: light-dark(rgb(226 85 7), rgb(251 106 34));
+  --green: light-dark(rgb(0 162 64), rgb(64 201 119));
+  --red: light-dark(rgb(224 46 42), rgb(255 103 100));
+  --purple: light-dark(rgb(146 79 247), rgb(173 123 249));
+  --yellow: light-dark(rgb(255 195 0), rgb(255 210 64));
+  --viz-series-1: var(--primary);
+  --viz-series-2: light-dark(rgb(243 136 59), rgb(245 154 86));
+  --viz-series-3: light-dark(rgb(93 201 119), rgb(116 213 139));
+  --viz-series-4: light-dark(rgb(235 119 177), rgb(240 143 192));
+  --viz-series-5: light-dark(rgb(155 121 236), rgb(170 145 239));
+  --viz-series-6: light-dark(rgb(58 185 177), rgb(90 203 194));
+
+  /* Internal implementation variables; not part of the agent contract. */
+  --font-sans: -apple-system, system-ui, &quot;Segoe UI&quot;, sans-serif;
+  --font-mono:
+    ui-monospace, SFMono-Regular, &quot;SF Mono&quot;, Menlo, Consolas, &quot;Liberation Mono&quot;,
+    monospace;
+  --font-size-normal: max(11px, var(--font-size-base));
+  --font-size-tooltip: calc(var(--font-size-base) - 1px);
+  --font-size-small: max(11px, calc(var(--font-size-base) - 2px));
+  --font-size-h1: calc(var(--font-size-normal) * 1.7142857143);
+  --font-size-h2: calc(var(--font-size-normal) * 1.4285714286);
+  --font-size-h3: calc(var(--font-size-normal) * 1.2857142857);
+  --font-weight-normal: 430;
+  --font-weight-medium: 500;
+  --line-height-normal: calc(var(--font-size-normal) * 1.5);
+  --line-height-tooltip: calc(var(--font-size-tooltip) * 1.4285714286);
+  --line-height-small: calc(var(--font-size-small) + 4px);
+  --radius: var(--border-radius-lg, 12.5px);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-2xl: calc(var(--radius) * 1.6);
+  --radius-full: 9999px;
+  --shadow-sm: 0 1px 2px -1px rgb(0 0 0 / 8%);
+  --checkmark-image: url(&quot;data:image/svg+xml,%3Csvg xmlns=&#x27;http://www.w3.org/2000/svg&#x27; viewBox=&#x27;0 0 17 17&#x27;%3E%3Cpath d=&#x27;M12.8961 3.64101C13.1297 3.41418 13.4984 3.37523 13.7779 3.56581C14.0571 3.75635 14.1554 4.11331 14.0299 4.41347L13.9615 4.53847L7.71151 13.7045C7.59411 13.8767 7.4063 13.9877 7.19881 14.0072C6.99136 14.0267 6.78564 13.9533 6.63826 13.806L2.88826 10.056L2.79842 9.9457C2.6192 9.67407 2.64927 9.30496 2.88826 9.06581C3.12738 8.82669 3.49647 8.79676 3.76815 8.97597L3.8785 9.06581L7.03084 12.2182L12.8053 3.74941L12.8961 3.64101Z&#x27;/%3E%3C/svg%3E&quot;);
+
+  /* Legacy aliases; not part of the current agent contract. */
+  --viz-bg: transparent;
+  --viz-panel: var(--card);
+  --viz-border: var(--border);
+  --viz-text: var(--foreground);
+  --viz-muted: var(--muted-foreground);
+  --viz-accent: var(--primary);
+  --viz-accent-text: var(--primary-foreground);
+  --viz-accent-bg: var(--accent);
+  --viz-font-size: var(--font-size-base);
+  --viz-warning: var(--destructive);
+}
+
+:root[data-theme=&quot;light&quot;] {
+  color-scheme: light;
+}
+
+:root[data-theme=&quot;dark&quot;] {
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html &gt; body {
+  /* Preserve MCP aliases for older inline renderers without creating :root cycles. */
+  --color-background-primary: var(
+    --background,
+    light-dark(rgb(255 255 255), rgb(24 24 24))
+  );
+  --color-text-primary: var(
+    --foreground,
+    light-dark(rgb(26 28 31), rgb(255 255 255))
+  );
+  --color-border-secondary: var(
+    --border,
+    light-dark(rgb(26 28 31 / 8%), rgb(255 255 255 / 8.2%))
+  );
+
+  margin: 0;
+  padding: 5px;
+  color: var(--foreground);
+  background: transparent !important;
+  font-family: var(--font-sans) !important;
+  font-size: var(--font-size-normal);
+  font-weight: var(--font-weight-normal);
+  line-height: var(--line-height-normal);
+}
+
+a {
+  color: color-mix(in srgb, var(--viz-accent) 80%, var(--viz-text) 20%);
+  cursor: pointer;
+  font-weight: var(--font-weight-medium, 500);
+  text-decoration: none;
+  text-underline-offset: 2px;
+}
+
+a:is(:hover, :focus-visible) {
+  text-decoration-line: underline;
+  text-decoration-style: dashed;
+  text-decoration-thickness: 0.5px;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+p {
+  margin-block: 0;
+}
+
+h1 {
+  font-size: var(--font-size-h1);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.25;
+}
+
+h2 {
+  font-size: var(--font-size-h2);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.25;
+}
+
+h3,
+h4,
+h5,
+h6 {
+  font-size: var(--font-size-h3);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.3;
+}
+
+b,
+strong,
+th {
+  font-weight: var(--font-weight-medium);
+}
+
+code:not(pre code) {
+  display: inline;
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  corner-shape: superellipse(1.5);
+  background: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+  overflow-wrap: anywhere;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+  word-break: break-word;
+}
+
+.table-responsive {
+  width: 100%;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  color: var(--foreground);
+  font: inherit;
+  text-align: start;
+}
+
+.table :is(th, td) {
+  padding-block: 10px;
+  padding-inline: 0 24px;
+  overflow-wrap: anywhere;
+  border-bottom: 1px solid var(--border);
+  text-align: start;
+  vertical-align: top;
+}
+
+.table-responsive &gt; .table :is(th, td) {
+  overflow-wrap: break-word;
+}
+
+.table :is(th, td):last-child {
+  padding-inline-end: 0;
+}
+
+.table :is(caption, thead th) {
+  font-weight: 600;
+}
+
+.table thead th {
+  padding-block: 8px;
+  border-bottom-color: color-mix(in srgb, var(--foreground) 16%, transparent);
+}
+
+.table tbody tr:last-child :is(th, td) {
+  border-bottom: 0;
+}
+
+.table.table-sm :is(th, td) {
+  padding-block: 6px;
+}
+
+.table.table-sm :is(th, td):not(:last-child) {
+  padding-inline-end: 16px;
+}
+
+.table :is(.text-end, [align=&quot;right&quot;]) {
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+}
+
+.table :is(.text-center, [align=&quot;center&quot;]) {
+  text-align: center;
+}
+
+.table .text-nowrap {
+  white-space: nowrap;
+}
+
+#widget {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  padding: 0;
+  background: transparent !important;
+}
+
+.card {
+  min-width: 0;
+  padding: 12px;
+  overflow: hidden;
+  overflow-wrap: break-word;
+  border-radius: var(--radius-2xl);
+  corner-shape: superellipse(1.5);
+  color: var(--card-foreground);
+  background: var(--card);
+}
+
+#widget &gt; :not(.card, .progress) {
+  width: 100% !important;
+  max-width: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.tooltip {
+  position: fixed;
+  z-index: 50;
+  top: 0;
+  left: 0;
+  width: max-content;
+  max-width: min(
+    20rem,
+    var(--tooltip-available-width, calc(100vw - 10px)),
+    calc(100vw - 10px)
+  );
+  max-height: min(
+    var(--tooltip-available-height, calc(100vh - 10px)),
+    calc(100vh - 10px)
+  );
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  corner-shape: superellipse(1.5);
+  color: var(--popover-foreground);
+  background: var(--popover);
+  box-shadow: none;
+  font-size: var(--font-size-tooltip);
+  line-height: var(--line-height-tooltip);
+  overflow-wrap: break-word;
+  white-space: normal;
+  pointer-events: none;
+  user-select: none;
+}
+
+.viz-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(max(180px, 24%), 1fr));
+  gap: 10px;
+}
+
+.viz-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.viz-stat-value {
+  font-size: var(--font-size-h2);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.25;
+}
+
+.viz-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.progress {
+  display: flex;
+  height: 6px;
+  margin-block: calc((var(--line-height-normal, 1.5em) - 6px) / 2);
+  overflow: hidden;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--muted);
+}
+
+.progress-bar {
+  height: 100%;
+  flex-shrink: 0;
+  border: 0;
+  background: var(--viz-series-1);
+}
+
+.viz-badge {
+  padding: 3px 8px;
+  border-radius: var(--radius-full);
+  color: var(--accent-foreground);
+  background: var(--accent);
+  font-weight: var(--font-weight-medium);
+}
+
+small,
+.text-small,
+.viz-badge {
+  font-size: var(--font-size-small);
+  line-height: var(--line-height-small);
+}
+
+.text-muted {
+  color: var(--muted-foreground);
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.viz-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.viz-controls &gt; .form-label {
+  display: grid;
+  min-width: min(100%, 260px);
+  flex: 1 1 280px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 2px 12px;
+  margin-bottom: 0;
+}
+
+.viz-controls &gt; .form-label &gt; :is(.form-control, .form-range, .form-select) {
+  grid-column: 1 / -1;
+}
+
+.btn,
+.form-check-input,
+.form-control,
+.form-range,
+.form-select {
+  font: inherit;
+}
+
+.btn {
+  appearance: button;
+  display: inline-flex;
+  inline-size: fit-content;
+  max-inline-size: 100%;
+  min-height: 28px;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  margin: 0;
+  padding: 0 8px;
+  -webkit-app-region: no-drag;
+  border: 1px solid var(--input);
+  border-radius: var(--radius-lg);
+  corner-shape: superellipse(1.5);
+  color: var(--secondary-foreground);
+  background: var(--secondary);
+  cursor: var(--cursor-interaction, pointer);
+  text-align: center;
+  text-decoration: none;
+  white-space: nowrap;
+  user-select: none;
+  -webkit-font-smoothing: antialiased;
+}
+
+.btn:is(.btn-block, .viz-tile) {
+  inline-size: 100%;
+}
+
+.btn.viz-tile {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+a.btn {
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.btn:not(:disabled):hover {
+  background: color-mix(in srgb, var(--foreground) 6%, var(--secondary));
+}
+
+.btn-primary {
+  border-color: transparent;
+  color: var(--primary-foreground);
+  background: var(--foreground);
+  background-clip: padding-box;
+}
+
+.btn-primary .text-muted {
+  color: color-mix(in srgb, var(--primary-foreground) 50%, transparent);
+}
+
+.btn-primary:not(:disabled):hover {
+  background: color-mix(in srgb, var(--foreground) 80%, transparent);
+  background-clip: padding-box;
+}
+
+.btn-ghost {
+  border-color: transparent;
+  color: var(--muted-foreground);
+  background: transparent;
+}
+
+.btn-ghost:not(:disabled):hover {
+  color: var(--foreground);
+  background: color-mix(in srgb, var(--foreground) 6%, var(--secondary));
+}
+
+.btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+[data-lucide] {
+  stroke-width: 1.6;
+}
+
+.form-label {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--foreground);
+}
+
+.form-control {
+  display: block;
+  width: 100%;
+  min-height: 28px;
+  padding: 0 8px;
+  outline: none;
+  border: 1px solid var(--input);
+  border-radius: var(--radius-lg);
+  corner-shape: superellipse(1.5);
+  color: var(--foreground);
+  background: var(--secondary);
+}
+
+.form-control::placeholder {
+  color: var(--muted-foreground);
+}
+
+.form-control[type=&quot;file&quot;] {
+  padding: 0;
+  overflow: hidden;
+  cursor: var(--cursor-interaction, pointer);
+}
+
+.form-control[type=&quot;file&quot;]::file-selector-button {
+  min-height: 26px;
+  margin-right: 8px;
+  padding: 0 8px;
+  border: 0;
+  border-right: 1px solid var(--input);
+  color: var(--secondary-foreground);
+  background: var(--secondary);
+  cursor: inherit;
+  font: inherit;
+}
+
+.form-control[type=&quot;file&quot;]:not(:disabled):hover::file-selector-button {
+  background: color-mix(in srgb, var(--foreground) 6%, var(--secondary));
+}
+
+.form-control-color[type=&quot;color&quot;] {
+  width: 40px;
+  height: 28px;
+  padding: 3px;
+  cursor: var(--cursor-interaction, pointer);
+}
+
+.form-control-color[type=&quot;color&quot;]::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+.form-control-color[type=&quot;color&quot;]::-webkit-color-swatch {
+  border: 0;
+  border-radius: calc(var(--radius-lg) - 4px);
+  corner-shape: superellipse(1.5);
+}
+
+textarea.form-control {
+  height: auto;
+  min-height: 72px;
+  padding: 8px 10px;
+  resize: vertical;
+}
+
+.form-control:focus-visible {
+  border-color: var(--ring);
+  box-shadow: inset 0 0 0 1px var(--ring);
+}
+
+.form-control:disabled,
+.form-select:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.form-select {
+  appearance: none;
+  display: block;
+  width: 100%;
+  min-height: 28px;
+  margin: 0;
+  padding: 0 32px 0 8px;
+  outline: none;
+  border: 1px solid var(--input);
+  border-radius: var(--radius-lg);
+  corner-shape: superellipse(1.5);
+  color: var(--foreground);
+  background-color: var(--secondary);
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--muted-foreground) 50%),
+    linear-gradient(135deg, var(--muted-foreground) 50%, transparent 50%);
+  background-position:
+    calc(100% - 14px) 50%,
+    calc(100% - 10px) 50%;
+  background-repeat: no-repeat;
+  background-size: 4px 4px;
+  cursor: var(--cursor-interaction, default);
+}
+
+.form-select:not(:disabled):hover {
+  background-color: color-mix(in srgb, var(--foreground) 6%, var(--secondary));
+}
+
+.form-select:focus-visible {
+  border-color: var(--ring);
+  box-shadow: inset 0 0 0 1px var(--ring);
+}
+
+.form-check {
+  display: flex;
+  min-height: 20px;
+  align-items: center;
+  gap: 6px;
+}
+
+.form-check-input {
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  margin: 0;
+  border: 1px solid var(--input);
+  color: var(--primary-foreground);
+  background-color: transparent;
+  cursor: var(--cursor-interaction, default);
+  transition:
+    background-color 150ms,
+    border-color 150ms,
+    box-shadow 150ms;
+}
+
+.form-check:not(.form-switch) .form-check-input[type=&quot;checkbox&quot;] {
+  border-color: var(--input);
+  border-radius: var(--radius-sm);
+  corner-shape: superellipse(1.5);
+  background-color: var(--secondary);
+  box-shadow: var(--shadow-sm);
+}
+
+.form-check:not(.form-switch)
+  .form-check-input:not(:disabled):not(:checked):hover {
+  background-color: var(--card);
+}
+
+.form-check:not(.form-switch) .form-check-input[type=&quot;checkbox&quot;]:checked {
+  border-color: var(--primary);
+  background-color: var(--primary);
+}
+
+.form-check:not(.form-switch)
+  .form-check-input[type=&quot;checkbox&quot;]:checked::before {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: var(--primary-foreground);
+  content: &quot;&quot;;
+  mask: var(--checkmark-image) center / 12px 12px no-repeat;
+}
+
+.form-check-input[type=&quot;radio&quot;] {
+  width: 14px;
+  height: 14px;
+  border-radius: var(--radius-full);
+}
+
+.form-check-input[type=&quot;radio&quot;]:checked {
+  border: 2px solid var(--primary);
+  background:
+    radial-gradient(circle, var(--primary-foreground) 0 2.5px, transparent 3px),
+    var(--primary);
+}
+
+.form-check:not(.form-switch) .form-check-input:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+.form-check:not(.form-switch) .form-check-input:disabled {
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.form-check:not(.form-switch) .form-check-input:disabled + .form-check-label {
+  cursor: not-allowed;
+}
+
+.form-switch .form-check-input:disabled,
+.form-switch .form-check-input:disabled + .form-check-label {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.form-check-label {
+  color: var(--foreground);
+  cursor: var(--cursor-interaction, default);
+}
+
+.form-switch .form-check-input {
+  position: relative;
+  width: 32px;
+  height: 20px;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--muted);
+  box-shadow: none;
+  transition: background-color 200ms cubic-bezier(0, 0, 0.2, 1);
+}
+
+.form-switch .form-check-input::before {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 16px;
+  height: 16px;
+  box-sizing: border-box;
+  border: 1px solid light-dark(var(--primary-foreground), var(--foreground));
+  border-radius: var(--radius-full);
+  background: light-dark(var(--primary-foreground), var(--foreground));
+  box-shadow: var(--shadow-sm);
+  content: &quot;&quot;;
+  transform: translate(2px, -50%);
+  transition: transform 200ms cubic-bezier(0, 0, 0.2, 1);
+}
+
+.form-switch .form-check-input:checked {
+  background: var(--primary);
+}
+
+.form-switch .form-check-input:checked::before {
+  transform: translate(14px, -50%);
+}
+
+.form-switch .form-check-input:focus-visible {
+  box-shadow: 0 0 0 2px var(--ring);
+}
+
+.form-range {
+  appearance: none;
+  display: block;
+  width: 100%;
+  height: 28px;
+  flex: 1;
+  margin: 0;
+  padding: 0;
+  outline: none;
+  border: 0;
+  accent-color: var(--primary);
+  background: linear-gradient(
+      color-mix(in srgb, var(--foreground) 7%, transparent),
+      color-mix(in srgb, var(--foreground) 7%, transparent)
+    )
+    center / 100% 2px no-repeat;
+}
+
+.form-range::-webkit-slider-runnable-track {
+  height: 28px;
+  background: transparent;
+}
+
+.form-range::-webkit-slider-thumb {
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  margin-top: 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  background: light-dark(var(--primary-foreground), var(--foreground));
+}
+
+.form-range:focus-visible::-webkit-slider-thumb {
+  border-color: var(--ring);
+  box-shadow: inset 0 0 0 1px var(--ring);
+}
+
+.form-range::-moz-range-track {
+  height: 28px;
+  background: transparent;
+}
+
+.form-range::-moz-range-thumb {
+  width: 20px;
+  height: 20px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  background: light-dark(var(--primary-foreground), var(--foreground));
+}
+
+.form-range:focus-visible::-moz-range-thumb {
+  border-color: var(--ring);
+  box-shadow: inset 0 0 0 1px var(--ring);
+}
+
+.form-range:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.btn:not(.btn-primary, .viz-tile):is(
+  [aria-pressed=&quot;true&quot;],
+  [aria-selected=&quot;true&quot;],
+  .is-selected
+) {
+  border-color: var(--primary);
+  color: var(--primary-foreground);
+  background: var(--primary);
+}
+
+.btn.viz-tile:is([aria-pressed=&quot;true&quot;], [aria-selected=&quot;true&quot;], .is-selected) {
+  border-color: var(--primary);
+  box-shadow: inset 0 0 0 1px var(--primary);
+}
+
+.btn:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+#widget &gt; svg {
+  width: 100%;
+}
+
+/* Model-authored chart rules can otherwise stretch icons after these styles load. */
+svg.lucide {
+  display: block;
+  width: 16px !important;
+  height: 16px !important;
+  flex: none;
+  margin: 0 !important;
+  stroke-width: 1.6;
+}
+
+.text-warning,
+.text-destructive {
+  color: var(--destructive);
+}
+
+html&gt;body{padding:0}&lt;/style&gt;
+&lt;/head&gt;
+&lt;body&gt;
+&lt;div id=&quot;campus-market-concept&quot;&gt;
+  &lt;style&gt;
+    #campus-market-concept {
+      --market-page: #f2f4ee;
+      --market-surface: #ffffff;
+      --market-ink: #20241f;
+      --market-muted: #697066;
+      --market-line: #d7ddd2;
+      --market-accent: #e84b2f;
+      --market-accent-ink: #ffffff;
+      --market-tint: #dfe9d8;
+      --market-shadow: rgba(47, 64, 42, 0.12);
+      --market-sheet: url(&quot;data:image/webp;base64,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&quot;);
+      color: var(--market-ink);
+      font-family: &quot;Microsoft YaHei&quot;, &quot;PingFang SC&quot;, system-ui, sans-serif;
+      width: 100%;
+      container-type: inline-size;
+    }
+
+    #campus-market-concept * { box-sizing: border-box; }
+    #campus-market-concept button,
+    #campus-market-concept input { font: inherit; }
+
+    #campus-market-concept .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+
+    #campus-market-concept .market-shell {
+      overflow: hidden;
+      border: 1px solid var(--market-line);
+      border-radius: 18px;
+      background: var(--market-page);
+      box-shadow: 0 20px 55px var(--market-shadow);
+    }
+
+    #campus-market-concept .market-nav {
+      min-height: 68px;
+      display: grid;
+      grid-template-columns: auto minmax(180px, 1fr) auto;
+      align-items: center;
+      gap: 24px;
+      padding: 0 28px;
+      background: var(--market-surface);
+      border-bottom: 1px solid var(--market-line);
+    }
+
+    #campus-market-concept .market-brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 9px;
+      border: 0;
+      background: transparent;
+      color: var(--market-ink);
+      font-weight: 500;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    #campus-market-concept .brand-mark {
+      width: 28px;
+      height: 28px;
+      display: grid;
+      place-items: center;
+      border-radius: 9px 9px 9px 2px;
+      background: var(--market-accent);
+      color: var(--market-accent-ink);
+      transform: rotate(-4deg);
+    }
+
+    #campus-market-concept .market-search {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      width: 100%;
+      min-height: 40px;
+      padding: 0 14px;
+      border: 1px solid var(--market-line);
+      border-radius: 12px;
+      background: var(--market-page);
+      color: var(--market-muted);
+    }
+    #campus-market-concept .market-search input {
+      min-width: 0;
+      flex: 1;
+      border: 0;
+      outline: 0;
+      background: transparent;
+      color: var(--market-ink);
+    }
+    #campus-market-concept .market-search input::placeholder { color: var(--market-muted); }
+
+    #campus-market-concept .nav-actions { display: flex; align-items: center; gap: 10px; }
+    #campus-market-concept .icon-action,
+    #campus-market-concept .primary-action,
+    #campus-market-concept .secondary-action,
+    #campus-market-concept .back-action {
+      border: 0;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    #campus-market-concept button:disabled {
+      cursor: not-allowed;
+      opacity: 0.58;
+      filter: saturate(0.72);
+    }
+    #campus-market-concept .icon-action {
+      width: 40px;
+      height: 40px;
+      display: grid;
+      place-items: center;
+      border-radius: 12px;
+      background: transparent;
+      color: var(--market-ink);
+    }
+    #campus-market-concept .primary-action {
+      min-height: 40px;
+      padding: 0 17px;
+      border-radius: 12px;
+      background: var(--market-accent);
+      color: var(--market-accent-ink);
+      font-weight: 500;
+    }
+    #campus-market-concept .secondary-action,
+    #campus-market-concept .back-action {
+      min-height: 40px;
+      padding: 0 15px;
+      border-radius: 12px;
+      background: var(--market-surface);
+      color: var(--market-ink);
+      border: 1px solid var(--market-line);
+    }
+    #campus-market-concept .back-action,
+    #campus-market-concept .favorite-action {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+    #campus-market-concept button:active { transform: translateY(1px); }
+
+    #campus-market-concept .market-view { padding: 24px 28px 30px; }
+    #campus-market-concept .home-view { display: block; }
+    #campus-market-concept .detail-view { display: none; }
+
+    #campus-market-concept .market-hero {
+      display: grid;
+      grid-template-columns: minmax(0, 1.05fr) minmax(270px, 0.95fr);
+      min-height: 310px;
+      overflow: hidden;
+      border-radius: 16px;
+      background: var(--market-tint);
+    }
+    #campus-market-concept .hero-copy {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: flex-start;
+      padding: 36px;
+    }
+    #campus-market-concept .hero-kicker {
+      margin: 0 0 12px;
+      color: var(--market-accent);
+      font-weight: 500;
+    }
+    #campus-market-concept .hero-copy h1 {
+      max-width: 9ch;
+      margin: 0;
+      font-size: clamp(34px, 6vw, 58px);
+      line-height: 1.02;
+      letter-spacing: -0.055em;
+      font-weight: 500;
+    }
+    #campus-market-concept .hero-copy p {
+      max-width: 24em;
+      margin: 18px 0 24px;
+      color: var(--market-muted);
+      line-height: 1.7;
+    }
+    #campus-market-concept .hero-media {
+      position: relative;
+      min-height: 310px;
+      overflow: hidden;
+      background-image: var(--market-sheet);
+      background-size: 300% 200%;
+      background-position: 0 100%;
+    }
+    #campus-market-concept .hero-media::after {
+      content: &quot;¥299&quot;;
+      position: absolute;
+      right: 20px;
+      bottom: 20px;
+      padding: 9px 13px;
+      border-radius: 11px;
+      background: var(--market-surface);
+      color: var(--market-ink);
+      box-shadow: 0 10px 28px var(--market-shadow);
+      font-weight: 500;
+    }
+
+    #campus-market-concept .market-trust-strip {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 0;
+      margin: 16px 0 26px;
+      border: 1px solid var(--market-line);
+      border-radius: 14px;
+      background: var(--market-surface);
+    }
+    #campus-market-concept .trust-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-height: 54px;
+      padding: 0 16px;
+      color: var(--market-muted);
+    }
+    #campus-market-concept .trust-item + .trust-item { border-left: 1px solid var(--market-line); }
+    #campus-market-concept .trust-item svg { color: var(--market-accent); }
+
+    #campus-market-concept .catalog-head {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 15px;
+    }
+    #campus-market-concept .catalog-head h2 {
+      margin: 0;
+      font-size: 24px;
+      line-height: 1.2;
+      letter-spacing: -0.03em;
+      font-weight: 500;
+    }
+    #campus-market-concept .category-row { display: flex; flex-wrap: wrap; gap: 8px; }
+    #campus-market-concept .category-button {
+      border: 1px solid var(--market-line);
+      border-radius: 999px;
+      padding: 7px 12px;
+      background: transparent;
+      color: var(--market-muted);
+      cursor: pointer;
+    }
+    #campus-market-concept .category-button[aria-pressed=&quot;true&quot;] {
+      border-color: var(--market-ink);
+      background: var(--market-ink);
+      color: var(--market-surface);
+    }
+
+    #campus-market-concept .product-grid {
+      display: grid;
+      grid-template-columns: 1.22fr 1fr 1fr;
+      gap: 14px;
+    }
+    #campus-market-concept .product-card {
+      min-width: 0;
+      overflow: hidden;
+      padding: 0;
+      border: 1px solid var(--market-line);
+      border-radius: 15px;
+      background: var(--market-surface);
+      color: var(--market-ink);
+      text-align: left;
+      cursor: pointer;
+      box-shadow: 0 8px 24px rgba(47, 64, 42, 0.04);
+    }
+    #campus-market-concept .product-card.is-filtered { display: none; }
+    #campus-market-concept .product-image {
+      aspect-ratio: 1.18 / 1;
+      overflow: hidden;
+      background-image: var(--market-sheet);
+      background-size: 300% 200%;
+      background-repeat: no-repeat;
+      transform: scale(1.001);
+    }
+    #campus-market-concept .product-card[data-product=&quot;headphones&quot;] .product-image { background-position: 0 0; }
+    #campus-market-concept .product-card[data-product=&quot;camera&quot;] .product-image { background-position: 50% 0; }
+    #campus-market-concept .product-card[data-product=&quot;lamp&quot;] .product-image { background-position: 100% 0; }
+    #campus-market-concept .product-card[data-product=&quot;reader&quot;] .product-image { background-position: 0 100%; }
+    #campus-market-concept .product-card[data-product=&quot;books&quot;] .product-image { background-position: 50% 100%; }
+    #campus-market-concept .product-card[data-product=&quot;kettle&quot;] .product-image { background-position: 100% 100%; }
+    #campus-market-concept .product-copy { padding: 14px; }
+    #campus-market-concept .product-top {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 10px;
+    }
+    #campus-market-concept .product-title {
+      margin: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-weight: 500;
+    }
+    #campus-market-concept .product-price {
+      color: var(--market-accent);
+      font-weight: 500;
+      white-space: nowrap;
+    }
+    #campus-market-concept .product-meta {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      margin-top: 10px;
+      color: var(--market-muted);
+      font-size: 12px;
+    }
+
+    #campus-market-concept .detail-view {
+      grid-template-columns: minmax(0, 1.12fr) minmax(280px, 0.88fr);
+      gap: 26px;
+    }
+    #campus-market-concept .detail-media {
+      min-height: 430px;
+      border-radius: 16px;
+      background-image: var(--market-sheet);
+      background-size: 300% 200%;
+      background-position: 0 100%;
+    }
+    #campus-market-concept .detail-panel { display: flex; flex-direction: column; align-items: stretch; }
+    #campus-market-concept .back-action { align-self: flex-start; margin-bottom: 24px; }
+    #campus-market-concept .detail-panel h2 {
+      margin: 0;
+      font-size: clamp(28px, 4vw, 42px);
+      line-height: 1.12;
+      letter-spacing: -0.04em;
+      font-weight: 500;
+    }
+    #campus-market-concept .detail-price {
+      margin: 18px 0 20px;
+      color: var(--market-accent);
+      font-size: 34px;
+      font-weight: 500;
+    }
+    #campus-market-concept .detail-facts {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-bottom: 18px;
+    }
+    #campus-market-concept .detail-fact {
+      padding: 13px;
+      border-radius: 12px;
+      background: var(--market-tint);
+    }
+    #campus-market-concept .detail-fact span { display: block; color: var(--market-muted); margin-bottom: 5px; font-size: 12px; }
+    #campus-market-concept .seller-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 15px 0;
+      border-top: 1px solid var(--market-line);
+      border-bottom: 1px solid var(--market-line);
+    }
+    #campus-market-concept .seller-avatar {
+      width: 42px;
+      height: 42px;
+      display: grid;
+      place-items: center;
+      border-radius: 13px;
+      background: var(--market-accent);
+      color: var(--market-accent-ink);
+      font-weight: 500;
+    }
+    #campus-market-concept .seller-copy { flex: 1; }
+    #campus-market-concept .seller-copy strong { display: block; font-weight: 500; }
+    #campus-market-concept .seller-copy span { color: var(--market-muted); font-size: 12px; }
+    #campus-market-concept .verified-label { color: var(--market-accent); font-size: 12px; }
+    #campus-market-concept .detail-actions {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 10px;
+      margin-top: 20px;
+    }
+    #campus-market-concept .detail-actions .primary-action { width: 100%; }
+    #campus-market-concept .favorite-action[aria-pressed=&quot;true&quot;] {
+      color: var(--market-accent);
+      border-color: var(--market-accent);
+      background: color-mix(in srgb, var(--market-accent) 8%, var(--market-surface));
+    }
+
+    @media (max-width: 760px) {
+      #campus-market-concept .market-nav { grid-template-columns: auto 1fr; padding: 0 16px; gap: 12px; }
+      #campus-market-concept .market-search { grid-column: 1 / -1; grid-row: 2; margin: 0 0 14px; }
+      #campus-market-concept .nav-actions { justify-self: end; }
+      #campus-market-concept .nav-actions .icon-action { display: none; }
+      #campus-market-concept .market-view { padding: 16px; }
+      #campus-market-concept .market-hero { grid-template-columns: 1fr; }
+      #campus-market-concept .hero-copy { padding: 28px 24px; }
+      #campus-market-concept .hero-copy h1 { max-width: 11ch; }
+      #campus-market-concept .hero-media { min-height: 230px; }
+      #campus-market-concept .market-trust-strip { grid-template-columns: 1fr; }
+      #campus-market-concept .trust-item + .trust-item { border-left: 0; border-top: 1px solid var(--market-line); }
+      #campus-market-concept .catalog-head { align-items: flex-start; flex-direction: column; }
+      #campus-market-concept .product-grid { grid-template-columns: 1fr 1fr; }
+      #campus-market-concept .detail-view { grid-template-columns: 1fr; }
+      #campus-market-concept .detail-media { min-height: 330px; }
+    }
+
+    @media (max-width: 430px) {
+      #campus-market-concept .primary-action.nav-publish { padding: 0 12px; }
+      #campus-market-concept .product-grid { grid-template-columns: 1fr; }
+      #campus-market-concept .product-meta { font-size: 11px; }
+      #campus-market-concept .detail-facts { grid-template-columns: 1fr; }
+    }
+
+    @container (max-width: 560px) {
+      #campus-market-concept .market-nav { grid-template-columns: auto 1fr; padding: 0 16px; gap: 12px; }
+      #campus-market-concept .market-search { grid-column: 1 / -1; grid-row: 2; margin: 0 0 14px; }
+      #campus-market-concept .nav-actions { justify-self: end; }
+      #campus-market-concept .nav-actions .icon-action { display: none; }
+      #campus-market-concept .nav-publish { padding: 0 12px; }
+      #campus-market-concept .market-view { padding: 16px; }
+      #campus-market-concept .market-hero { grid-template-columns: 1fr; }
+      #campus-market-concept .hero-copy { padding: 28px 24px; }
+      #campus-market-concept .hero-copy h1 { max-width: 11ch; }
+      #campus-market-concept .hero-media { min-height: 230px; }
+      #campus-market-concept .market-trust-strip { grid-template-columns: 1fr; }
+      #campus-market-concept .trust-item + .trust-item { border-left: 0; border-top: 1px solid var(--market-line); }
+      #campus-market-concept .catalog-head { align-items: flex-start; flex-direction: column; }
+      #campus-market-concept .product-grid { grid-template-columns: 1fr; }
+      #campus-market-concept .detail-view { grid-template-columns: 1fr; }
+      #campus-market-concept .detail-media { min-height: 330px; }
+      #campus-market-concept .detail-facts { grid-template-columns: 1fr; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      #campus-market-concept *,
+      #campus-market-concept *::before,
+      #campus-market-concept *::after { scroll-behavior: auto !important; transition: none !important; }
+    }
+  &lt;/style&gt;
+
+  &lt;section class=&quot;market-shell&quot; aria-label=&quot;校园二手交易平台页面预览&quot;&gt;
+    &lt;nav class=&quot;market-nav&quot; aria-label=&quot;主导航&quot;&gt;
+      &lt;button class=&quot;market-brand&quot; type=&quot;button&quot; data-go-home&gt;
+        &lt;span class=&quot;brand-mark&quot;&gt;&lt;i data-lucide=&quot;repeat-2&quot; aria-hidden=&quot;true&quot;&gt;&lt;/i&gt;&lt;/span&gt;
+        &lt;span&gt;校集&lt;/span&gt;
+      &lt;/button&gt;
+      &lt;label class=&quot;market-search&quot;&gt;
+        &lt;span class=&quot;sr-only&quot;&gt;搜索商品&lt;/span&gt;
+        &lt;i data-lucide=&quot;search&quot; aria-hidden=&quot;true&quot;&gt;&lt;/i&gt;
+        &lt;input type=&quot;search&quot; placeholder=&quot;搜索耳机、教材、台灯&quot; /&gt;
+      &lt;/label&gt;
+      &lt;div class=&quot;nav-actions&quot;&gt;
+        &lt;button class=&quot;icon-action&quot; type=&quot;button&quot; aria-label=&quot;消息功能将在开发阶段接入&quot; title=&quot;页面设计示意，功能将在开发阶段接入&quot; disabled&gt;&lt;i data-lucide=&quot;message-circle&quot; aria-hidden=&quot;true&quot;&gt;&lt;/i&gt;&lt;/button&gt;
+        &lt;button class=&quot;primary-action nav-publish&quot; type=&quot;button&quot; title=&quot;页面设计示意，功能将在开发阶段接入&quot; disabled&gt;发布闲置&lt;/button&gt;
+      &lt;/div&gt;
+    &lt;/nav&gt;
+
+    &lt;main class=&quot;market-view home-view&quot;&gt;
+      &lt;section class=&quot;market-hero&quot;&gt;
+        &lt;div class=&quot;hero-copy&quot;&gt;
+          &lt;p class=&quot;hero-kicker&quot;&gt;只和同校同学交易&lt;/p&gt;
+          &lt;h1&gt;闲置转手，也要体面&lt;/h1&gt;
+          &lt;p&gt;认证学生发布，校内当面验货。让每件好物继续被使用。&lt;/p&gt;
+          &lt;button class=&quot;primary-action&quot; type=&quot;button&quot; data-scroll-products&gt;逛逛好物&lt;/button&gt;
+        &lt;/div&gt;
+        &lt;div class=&quot;hero-media&quot; role=&quot;img&quot; aria-label=&quot;九成新电子阅读器&quot;&gt;&lt;/div&gt;
+      &lt;/section&gt;
+
+      &lt;section class=&quot;market-trust-strip&quot; aria-label=&quot;交易保障&quot;&gt;
+        &lt;div class=&quot;trust-item&quot;&gt;&lt;i data-lucide=&quot;badge-check&quot; aria-hidden=&quot;true&quot;&gt;&lt;/i&gt;&lt;span&gt;校园身份认证&lt;/span&gt;&lt;/div&gt;
+        &lt;div class=&quot;trust-item&quot;&gt;&lt;i data-lucide=&quot;map-pin&quot; aria-hidden=&quot;true&quot;&gt;&lt;/i&gt;&lt;span&gt;校内公共地点面交&lt;/span&gt;&lt;/div&gt;
+        &lt;div class=&quot;trust-item&quot;&gt;&lt;i data-lucide=&quot;shield-check&quot; aria-hidden=&quot;true&quot;&gt;&lt;/i&gt;&lt;span&gt;举报与信用记录&lt;/span&gt;&lt;/div&gt;
+      &lt;/section&gt;
+
+      &lt;section aria-labelledby=&quot;latest-title&quot;&gt;
+        &lt;div class=&quot;catalog-head&quot;&gt;
+          &lt;h2 id=&quot;latest-title&quot;&gt;刚刚上新&lt;/h2&gt;
+          &lt;div class=&quot;category-row&quot; aria-label=&quot;商品分类&quot;&gt;
+            &lt;button class=&quot;category-button&quot; type=&quot;button&quot; data-filter=&quot;all&quot; aria-pressed=&quot;true&quot;&gt;全部&lt;/button&gt;
+            &lt;button class=&quot;category-button&quot; type=&quot;button&quot; data-filter=&quot;digital&quot; aria-pressed=&quot;false&quot;&gt;数码&lt;/button&gt;
+            &lt;button class=&quot;category-button&quot; type=&quot;button&quot; data-filter=&quot;study&quot; aria-pressed=&quot;false&quot;&gt;学习&lt;/button&gt;
+            &lt;button class=&quot;category-button&quot; type=&quot;button&quot; data-filter=&quot;dorm&quot; aria-pressed=&quot;false&quot;&gt;宿舍&lt;/button&gt;
+          &lt;/div&gt;
+        &lt;/div&gt;
+
+        &lt;div class=&quot;product-grid&quot; aria-live=&quot;polite&quot;&gt;
+          &lt;button class=&quot;product-card&quot; type=&quot;button&quot; data-product=&quot;reader&quot; data-category=&quot;digital&quot; data-open-detail&gt;
+            &lt;div class=&quot;product-image&quot; role=&quot;img&quot; aria-label=&quot;电子阅读器&quot;&gt;&lt;/div&gt;
+            &lt;div class=&quot;product-copy&quot;&gt;&lt;div class=&quot;product-top&quot;&gt;&lt;p class=&quot;product-title&quot;&gt;九成新电子阅读器&lt;/p&gt;&lt;span class=&quot;product-price&quot;&gt;¥299&lt;/span&gt;&lt;/div&gt;&lt;div class=&quot;product-meta&quot;&gt;&lt;span&gt;东校区&lt;/span&gt;&lt;span&gt;计算机学院&lt;/span&gt;&lt;/div&gt;&lt;/div&gt;
+          &lt;/button&gt;
+          &lt;article class=&quot;product-card&quot; data-product=&quot;headphones&quot; data-category=&quot;digital&quot;&gt;
+            &lt;div class=&quot;product-image&quot; role=&quot;img&quot; aria-label=&quot;白色头戴耳机&quot;&gt;&lt;/div&gt;
+            &lt;div class=&quot;product-copy&quot;&gt;&lt;div class=&quot;product-top&quot;&gt;&lt;p class=&quot;product-title&quot;&gt;白色头戴耳机&lt;/p&gt;&lt;span class=&quot;product-price&quot;&gt;¥168&lt;/span&gt;&lt;/div&gt;&lt;div class=&quot;product-meta&quot;&gt;&lt;span&gt;南校区&lt;/span&gt;&lt;span&gt;外国语学院&lt;/span&gt;&lt;/div&gt;&lt;/div&gt;
+          &lt;/article&gt;
+          &lt;article class=&quot;product-card&quot; data-product=&quot;camera&quot; data-category=&quot;digital&quot;&gt;
+            &lt;div class=&quot;product-image&quot; role=&quot;img&quot; aria-label=&quot;微单相机&quot;&gt;&lt;/div&gt;
+            &lt;div class=&quot;product-copy&quot;&gt;&lt;div class=&quot;product-top&quot;&gt;&lt;p class=&quot;product-title&quot;&gt;入门微单相机&lt;/p&gt;&lt;span class=&quot;product-price&quot;&gt;¥980&lt;/span&gt;&lt;/div&gt;&lt;div class=&quot;product-meta&quot;&gt;&lt;span&gt;东校区&lt;/span&gt;&lt;span&gt;新闻学院&lt;/span&gt;&lt;/div&gt;&lt;/div&gt;
+          &lt;/article&gt;
+          &lt;article class=&quot;product-card&quot; data-product=&quot;lamp&quot; data-category=&quot;dorm&quot;&gt;
+            &lt;div class=&quot;product-image&quot; role=&quot;img&quot; aria-label=&quot;绿色台灯&quot;&gt;&lt;/div&gt;
+            &lt;div class=&quot;product-copy&quot;&gt;&lt;div class=&quot;product-top&quot;&gt;&lt;p class=&quot;product-title&quot;&gt;护眼折叠台灯&lt;/p&gt;&lt;span class=&quot;product-price&quot;&gt;¥45&lt;/span&gt;&lt;/div&gt;&lt;div class=&quot;product-meta&quot;&gt;&lt;span&gt;北校区&lt;/span&gt;&lt;span&gt;建筑学院&lt;/span&gt;&lt;/div&gt;&lt;/div&gt;
+          &lt;/article&gt;
+          &lt;article class=&quot;product-card&quot; data-product=&quot;books&quot; data-category=&quot;study&quot;&gt;
+            &lt;div class=&quot;product-image&quot; role=&quot;img&quot; aria-label=&quot;大学教材&quot;&gt;&lt;/div&gt;
+            &lt;div class=&quot;product-copy&quot;&gt;&lt;div class=&quot;product-top&quot;&gt;&lt;p class=&quot;product-title&quot;&gt;高数教材与习题册&lt;/p&gt;&lt;span class=&quot;product-price&quot;&gt;¥36&lt;/span&gt;&lt;/div&gt;&lt;div class=&quot;product-meta&quot;&gt;&lt;span&gt;东校区&lt;/span&gt;&lt;span&gt;理学院&lt;/span&gt;&lt;/div&gt;&lt;/div&gt;
+          &lt;/article&gt;
+          &lt;article class=&quot;product-card&quot; data-product=&quot;kettle&quot; data-category=&quot;dorm&quot;&gt;
+            &lt;div class=&quot;product-image&quot; role=&quot;img&quot; aria-label=&quot;银色电水壶&quot;&gt;&lt;/div&gt;
+            &lt;div class=&quot;product-copy&quot;&gt;&lt;div class=&quot;product-top&quot;&gt;&lt;p class=&quot;product-title&quot;&gt;宿舍小容量电水壶&lt;/p&gt;&lt;span class=&quot;product-price&quot;&gt;¥28&lt;/span&gt;&lt;/div&gt;&lt;div class=&quot;product-meta&quot;&gt;&lt;span&gt;西校区&lt;/span&gt;&lt;span&gt;经管学院&lt;/span&gt;&lt;/div&gt;&lt;/div&gt;
+          &lt;/article&gt;
+        &lt;/div&gt;
+      &lt;/section&gt;
+    &lt;/main&gt;
+
+    &lt;main class=&quot;market-view detail-view&quot;&gt;
+      &lt;div class=&quot;detail-media&quot; role=&quot;img&quot; aria-label=&quot;九成新电子阅读器&quot;&gt;&lt;/div&gt;
+      &lt;section class=&quot;detail-panel&quot; aria-labelledby=&quot;detail-title&quot;&gt;
+        &lt;button class=&quot;back-action&quot; type=&quot;button&quot; data-go-home&gt;&lt;i data-lucide=&quot;arrow-left&quot; aria-hidden=&quot;true&quot;&gt;&lt;/i&gt; 返回&lt;/button&gt;
+        &lt;h2 id=&quot;detail-title&quot;&gt;九成新电子阅读器&lt;/h2&gt;
+        &lt;p class=&quot;detail-price&quot;&gt;¥299&lt;/p&gt;
+        &lt;div class=&quot;detail-facts&quot;&gt;
+          &lt;div class=&quot;detail-fact&quot;&gt;&lt;span&gt;校区&lt;/span&gt;&lt;strong&gt;东校区&lt;/strong&gt;&lt;/div&gt;
+          &lt;div class=&quot;detail-fact&quot;&gt;&lt;span&gt;成色&lt;/span&gt;&lt;strong&gt;九成新&lt;/strong&gt;&lt;/div&gt;
+        &lt;/div&gt;
+        &lt;div class=&quot;seller-row&quot;&gt;
+          &lt;div class=&quot;seller-avatar&quot;&gt;计&lt;/div&gt;
+          &lt;div class=&quot;seller-copy&quot;&gt;&lt;strong&gt;计算机学院&lt;/strong&gt;&lt;span&gt;信用良好，已完成校园认证&lt;/span&gt;&lt;/div&gt;
+          &lt;span class=&quot;verified-label&quot;&gt;已认证&lt;/span&gt;
+        &lt;/div&gt;
+        &lt;div class=&quot;detail-actions&quot;&gt;
+          &lt;button class=&quot;secondary-action favorite-action&quot; type=&quot;button&quot; aria-pressed=&quot;false&quot;&gt;&lt;i data-lucide=&quot;heart&quot; aria-hidden=&quot;true&quot;&gt;&lt;/i&gt; 收藏&lt;/button&gt;
+          &lt;button class=&quot;primary-action&quot; type=&quot;button&quot; title=&quot;页面设计示意，功能将在开发阶段接入&quot; disabled&gt;联系卖家&lt;/button&gt;
+        &lt;/div&gt;
+      &lt;/section&gt;
+    &lt;/main&gt;
+  &lt;/section&gt;
+
+  &lt;script src=&quot;https://cdn.jsdelivr.net/npm/gsap@3.13.0/dist/gsap.min.js&quot;&gt;&lt;/script&gt;
+  &lt;script src=&quot;https://cdn.jsdelivr.net/npm/gsap@3.13.0/dist/ScrollTrigger.min.js&quot;&gt;&lt;/script&gt;
+  &lt;script&gt;
+    (() =&gt; {
+      const root = document.getElementById(&quot;campus-market-concept&quot;);
+      if (!root) return;
+
+      const shell = root.querySelector(&quot;.market-shell&quot;);
+      const home = root.querySelector(&quot;.home-view&quot;);
+      const detail = root.querySelector(&quot;.detail-view&quot;);
+      const cards = Array.from(root.querySelectorAll(&quot;.product-card&quot;));
+      const reduceMotion = window.matchMedia(&quot;(prefers-reduced-motion: reduce)&quot;).matches;
+      const speed = reduceMotion ? 0 : 1;
+
+      const showDetail = () =&gt; {
+        if (!window.gsap || reduceMotion) {
+          home.style.display = &quot;none&quot;;
+          detail.style.display = &quot;grid&quot;;
+          return;
+        }
+        gsap.timeline({ defaults: { ease: &quot;power2.out&quot; } })
+          .to(home, { autoAlpha: 0, y: 12, duration: 0.2 })
+          .set(home, { display: &quot;none&quot; })
+          .set(detail, { display: &quot;grid&quot;, autoAlpha: 0, y: 16 })
+          .to(detail, { autoAlpha: 1, y: 0, duration: 0.42 });
+      };
+
+      const showHome = () =&gt; {
+        if (!window.gsap || reduceMotion) {
+          detail.style.display = &quot;none&quot;;
+          home.style.display = &quot;block&quot;;
+          return;
+        }
+        gsap.timeline({ defaults: { ease: &quot;power2.out&quot; } })
+          .to(detail, { autoAlpha: 0, y: 12, duration: 0.2 })
+          .set(detail, { display: &quot;none&quot; })
+          .set(home, { display: &quot;block&quot;, autoAlpha: 0, y: 14 })
+          .to(home, { autoAlpha: 1, y: 0, duration: 0.42 });
+      };
+
+      root.querySelectorAll(&quot;[data-open-detail]&quot;).forEach((button) =&gt; button.addEventListener(&quot;click&quot;, showDetail));
+      root.querySelectorAll(&quot;[data-go-home]&quot;).forEach((button) =&gt; button.addEventListener(&quot;click&quot;, showHome));
+      root.querySelectorAll(&quot;[data-scroll-products]&quot;).forEach((button) =&gt; button.addEventListener(&quot;click&quot;, () =&gt; {
+        root.querySelector(&quot;#latest-title&quot;)?.scrollIntoView({ behavior: reduceMotion ? &quot;auto&quot; : &quot;smooth&quot;, block: &quot;start&quot; });
+      }));
+
+      root.querySelectorAll(&quot;.category-button&quot;).forEach((button) =&gt; {
+        button.addEventListener(&quot;click&quot;, () =&gt; {
+          const filter = button.dataset.filter;
+          root.querySelectorAll(&quot;.category-button&quot;).forEach((item) =&gt; item.setAttribute(&quot;aria-pressed&quot;, String(item === button)));
+          const visible = cards.filter((card) =&gt; filter === &quot;all&quot; || card.dataset.category === filter);
+          cards.forEach((card) =&gt; card.classList.toggle(&quot;is-filtered&quot;, !visible.includes(card)));
+          if (window.gsap &amp;&amp; !reduceMotion) gsap.fromTo(visible, { autoAlpha: 0, y: 10, scale: 0.985 }, { autoAlpha: 1, y: 0, scale: 1, duration: 0.36, stagger: 0.045, ease: &quot;power2.out&quot;, overwrite: true });
+        });
+      });
+
+      cards.forEach((card) =&gt; {
+        const image = card.querySelector(&quot;.product-image&quot;);
+        card.addEventListener(&quot;mouseenter&quot;, () =&gt; {
+          if (!window.gsap || reduceMotion) return;
+          gsap.to(card, { y: -4, duration: 0.28, ease: &quot;power2.out&quot;, overwrite: true });
+          gsap.to(image, { scale: 1.035, duration: 0.42, ease: &quot;power2.out&quot;, overwrite: true });
+        });
+        card.addEventListener(&quot;mouseleave&quot;, () =&gt; {
+          if (!window.gsap || reduceMotion) return;
+          gsap.to(card, { y: 0, duration: 0.28, ease: &quot;power2.out&quot;, overwrite: true });
+          gsap.to(image, { scale: 1.001, duration: 0.42, ease: &quot;power2.out&quot;, overwrite: true });
+        });
+      });
+
+      const favorite = root.querySelector(&quot;.favorite-action&quot;);
+      favorite.addEventListener(&quot;click&quot;, () =&gt; {
+        const next = favorite.getAttribute(&quot;aria-pressed&quot;) !== &quot;true&quot;;
+        favorite.setAttribute(&quot;aria-pressed&quot;, String(next));
+        if (window.gsap &amp;&amp; !reduceMotion) gsap.fromTo(favorite, { scale: 0.96 }, { scale: 1, duration: 0.3, ease: &quot;back.out(2)&quot;, overwrite: true });
+      });
+
+      if (window.lucide) lucide.createIcons({ attrs: { width: 16, height: 16, strokeWidth: 1.8 } });
+
+      if (window.gsap) {
+        gsap.registerPlugin(window.ScrollTrigger);
+        gsap.matchMedia().add({ motion: &quot;(prefers-reduced-motion: no-preference)&quot; }, () =&gt; {
+          gsap.timeline({ defaults: { ease: &quot;power3.out&quot; } })
+            .from(&quot;#campus-market-concept .market-nav&quot;, { autoAlpha: 0, y: -14, duration: 0.42 })
+            .from(&quot;#campus-market-concept .hero-copy &gt; *&quot;, { autoAlpha: 0, y: 18, duration: 0.45, stagger: 0.07 }, &quot;&lt;0.08&quot;)
+            .from(&quot;#campus-market-concept .hero-media&quot;, { autoAlpha: 0, scale: 1.04, duration: 0.58 }, &quot;&lt;0.02&quot;);
+          gsap.from(&quot;#campus-market-concept .product-card&quot;, {
+            autoAlpha: 0,
+            y: 22,
+            duration: 0.5,
+            stagger: 0.055,
+            ease: &quot;power2.out&quot;,
+            scrollTrigger: { trigger: &quot;#campus-market-concept .product-grid&quot;, start: &quot;top 88%&quot;, once: true }
+          });
+        }, root);
+      }
+    })();
+  &lt;/script&gt;
+&lt;/div&gt;
+
+&lt;script src=&quot;https://unpkg.com/@floating-ui/core@1.7.3/dist/floating-ui.core.umd.min.js&quot;&gt;&lt;/script&gt;
+&lt;script src=&quot;https://unpkg.com/@floating-ui/dom@1.7.4/dist/floating-ui.dom.umd.min.js&quot;&gt;&lt;/script&gt;
+&lt;script&gt;
+(() =&gt; {
+  if (window.FloatingUIDOM == null) {
+    return;
+  }
+  const { autoUpdate, computePosition, flip, offset, shift, size } =
+    window.FloatingUIDOM;
+  const tooltipPlacements = new Set([&quot;top&quot;, &quot;right&quot;, &quot;bottom&quot;, &quot;left&quot;]);
+  const tooltipId = `codex-visualization-tooltip-${
+    window.crypto?.randomUUID?.() ?? Date.now().toString(36)
+  }`;
+  const tooltipGap = 5;
+  const hoverDelay = 700;
+  const skipDelay = 300;
+  let activeTrigger = null;
+  let pendingTrigger = null;
+  let tooltip = null;
+  let openTimeout = null;
+  let autoUpdateCleanup = null;
+  let positionRequest = 0;
+  let skipDelayUntil = 0;
+
+  const getTrigger = (target) =&gt;
+    target?.nodeType === Node.ELEMENT_NODE
+      ? target.closest(&quot;[data-tooltip]&quot;)
+      : null;
+  const containsTarget = (trigger, target) =&gt;
+    target?.nodeType != null &amp;&amp; trigger.contains(target);
+  const getContent = (trigger) =&gt;
+    trigger.getAttribute(&quot;data-tooltip&quot;)?.trim() ?? &quot;&quot;;
+  const getPlacement = (trigger) =&gt; {
+    const placement = trigger.getAttribute(&quot;data-tooltip-placement&quot;);
+    return tooltipPlacements.has(placement) ? placement : &quot;top&quot;;
+  };
+  const getTooltip = () =&gt; {
+    if (tooltip == null) {
+      tooltip = document.createElement(&quot;div&quot;);
+      tooltip.id = tooltipId;
+      tooltip.className = &quot;tooltip&quot;;
+      tooltip.setAttribute(&quot;role&quot;, &quot;tooltip&quot;);
+    }
+    return tooltip;
+  };
+  const setDescribedBy = (trigger, described) =&gt; {
+    const ids = new Set(
+      (trigger.getAttribute(&quot;aria-describedby&quot;) ?? &quot;&quot;)
+        .split(/\s+/)
+        .filter(Boolean),
+    );
+    if (described) {
+      ids.add(tooltipId);
+    } else {
+      ids.delete(tooltipId);
+    }
+    if (ids.size === 0) {
+      trigger.removeAttribute(&quot;aria-describedby&quot;);
+    } else {
+      trigger.setAttribute(&quot;aria-describedby&quot;, [...ids].join(&quot; &quot;));
+    }
+  };
+  const clearOpenTimeout = () =&gt; {
+    if (openTimeout != null) {
+      window.clearTimeout(openTimeout);
+      openTimeout = null;
+    }
+    pendingTrigger = null;
+  };
+  const closeTooltip = (activateSkipDelay = true) =&gt; {
+    clearOpenTimeout();
+    positionRequest += 1;
+    autoUpdateCleanup?.();
+    autoUpdateCleanup = null;
+    if (activeTrigger == null) {
+      return;
+    }
+    setDescribedBy(activeTrigger, false);
+    activeTrigger = null;
+    tooltip?.remove();
+    if (activateSkipDelay) {
+      skipDelayUntil = Date.now() + skipDelay;
+    }
+  };
+  const updatePosition = (trigger, floating) =&gt; {
+    const request = ++positionRequest;
+    void computePosition(trigger, floating, {
+      middleware: [
+        offset(tooltipGap),
+        flip({ padding: tooltipGap }),
+        shift({ padding: tooltipGap }),
+        size({
+          padding: tooltipGap,
+          apply({ availableHeight, availableWidth, elements }) {
+            elements.floating.style.setProperty(
+              &quot;--tooltip-available-width&quot;,
+              `${Math.max(0, availableWidth)}px`,
+            );
+            elements.floating.style.setProperty(
+              &quot;--tooltip-available-height&quot;,
+              `${Math.max(0, availableHeight)}px`,
+            );
+          },
+        }),
+      ],
+      placement: getPlacement(trigger),
+      strategy: &quot;fixed&quot;,
+    })
+      .then(({ x, y }) =&gt; {
+        if (activeTrigger !== trigger || request !== positionRequest) {
+          return;
+        }
+        const scale = window.devicePixelRatio || 1;
+        floating.style.transform = `translate(${Math.round(x * scale) / scale}px, ${Math.round(y * scale) / scale}px)`;
+        floating.style.visibility = &quot;visible&quot;;
+      })
+      .catch(() =&gt; {
+        if (activeTrigger === trigger &amp;&amp; request === positionRequest) {
+          closeTooltip(false);
+        }
+      });
+  };
+  const openTooltip = (trigger) =&gt; {
+    const content = getContent(trigger);
+    if (!trigger.isConnected || content.length === 0) {
+      return;
+    }
+    clearOpenTimeout();
+    if (activeTrigger === trigger) {
+      return;
+    }
+    closeTooltip();
+    const floating = getTooltip();
+    floating.textContent = content;
+    floating.style.visibility = &quot;hidden&quot;;
+    floating.style.transform = &quot;translate(0, 0)&quot;;
+    document.body.appendChild(floating);
+    activeTrigger = trigger;
+    setDescribedBy(trigger, true);
+    autoUpdateCleanup = autoUpdate(trigger, floating, () =&gt; {
+      updatePosition(trigger, floating);
+    });
+  };
+  const requestOpen = (trigger, immediate = false) =&gt; {
+    if (
+      getContent(trigger).length === 0 ||
+      activeTrigger === trigger ||
+      pendingTrigger === trigger
+    ) {
+      return;
+    }
+    clearOpenTimeout();
+    pendingTrigger = trigger;
+    const delay =
+      immediate || activeTrigger != null || Date.now() &lt; skipDelayUntil
+        ? 0
+        : hoverDelay;
+    if (delay === 0) {
+      openTooltip(trigger);
+      return;
+    }
+    openTimeout = window.setTimeout(() =&gt; {
+      openTimeout = null;
+      pendingTrigger = null;
+      openTooltip(trigger);
+    }, delay);
+  };
+  const handlePointerOpen = (event) =&gt; {
+    if (event.pointerType === &quot;touch&quot;) {
+      return;
+    }
+    const trigger = getTrigger(event.target);
+    if (trigger == null || containsTarget(trigger, event.relatedTarget)) {
+      return;
+    }
+    requestOpen(trigger);
+  };
+  const handleLeave = (event) =&gt; {
+    const trigger = getTrigger(event.target);
+    if (trigger == null || containsTarget(trigger, event.relatedTarget)) {
+      return;
+    }
+    if (activeTrigger === trigger || pendingTrigger === trigger) {
+      closeTooltip();
+    }
+  };
+  const handleFocusIn = (event) =&gt; {
+    const trigger = getTrigger(event.target);
+    if (trigger?.matches(&quot;:focus-visible&quot;)) {
+      requestOpen(trigger, true);
+    }
+  };
+  const handleKeyDown = (event) =&gt; {
+    if (event.key === &quot;Escape&quot;) {
+      closeTooltip();
+    }
+  };
+  const handleContextMenu = (event) =&gt; {
+    const trigger = getTrigger(event.target);
+    if (activeTrigger === trigger || pendingTrigger === trigger) {
+      closeTooltip();
+    }
+  };
+  const destroy = () =&gt; {
+    closeTooltip(false);
+    document.removeEventListener(&quot;pointerover&quot;, handlePointerOpen);
+    document.removeEventListener(&quot;pointerout&quot;, handleLeave);
+    document.removeEventListener(&quot;focusin&quot;, handleFocusIn);
+    document.removeEventListener(&quot;focusout&quot;, handleLeave);
+    document.removeEventListener(&quot;keydown&quot;, handleKeyDown);
+    document.removeEventListener(&quot;contextmenu&quot;, handleContextMenu);
+    tooltip = null;
+  };
+
+  document.addEventListener(&quot;pointerover&quot;, handlePointerOpen);
+  document.addEventListener(&quot;pointerout&quot;, handleLeave);
+  document.addEventListener(&quot;focusin&quot;, handleFocusIn);
+  document.addEventListener(&quot;focusout&quot;, handleLeave);
+  document.addEventListener(&quot;keydown&quot;, handleKeyDown);
+  document.addEventListener(&quot;contextmenu&quot;, handleContextMenu);
+  window.addEventListener(&quot;pagehide&quot;, destroy, { once: true });
+})();
+&lt;/script&gt;
+&lt;script id=&quot;codex-visualization-lucide&quot; async src=&quot;https://unpkg.com/lucide@1.17.0/dist/umd/lucide.js&quot;&gt;&lt;/script&gt;
+&lt;script&gt;
+(() =&gt; {
+  const initialize = () =&gt; {
+    globalThis.lucide?.createIcons({ attrs: { width: 16, height: 16 } });
+  };
+  if (globalThis.lucide != null) {
+    initialize();
+    return;
+  }
+  document
+    .getElementById(&quot;codex-visualization-lucide&quot;)
+    ?.addEventListener(&quot;load&quot;, initialize, { once: true });
+})();
+&lt;/script&gt;
+
+&lt;/body&gt;
+&lt;/html&gt;
+"></iframe>
+</body>
+</html>
