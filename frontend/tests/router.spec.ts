@@ -1,9 +1,31 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia } from 'pinia'
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import App from '../src/App.vue'
 import router from '../src/router'
+
+beforeEach(() => {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          status: 'ready',
+          dependencies: {
+            database: { status: 'ready', reason: null },
+            redis: { status: 'ready', reason: null },
+          },
+        }),
+        { status: 200 },
+      ),
+    ),
+  )
+})
+
+afterEach(() => {
+  vi.unstubAllGlobals()
+})
 
 async function renderRoute(path: string) {
   await router.push(path)

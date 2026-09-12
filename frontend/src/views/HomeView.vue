@@ -3,6 +3,8 @@ import { gsap } from 'gsap'
 import { onMounted, onUnmounted, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 
+import HealthStatus from '../components/HealthStatus.vue'
+
 const root = ref<HTMLElement | null>(null)
 let motionContext: gsap.Context | undefined
 let media: gsap.MatchMedia | undefined
@@ -43,6 +45,7 @@ onUnmounted(() => {
       <p class="eyebrow">校园里的周末市集</p>
       <h1>闲置好物，换个主人继续发光</h1>
       <p class="hero-description">从同学手里发现好物，也让自己的闲置重新派上用场。</p>
+      <HealthStatus />
       <div class="hero-actions">
         <RouterLink class="button button-primary" to="/login"> 登录后发布 </RouterLink>
         <a class="button button-ghost" href="#ready">了解当前进度</a>

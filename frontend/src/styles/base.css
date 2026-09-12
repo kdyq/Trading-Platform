@@ -197,7 +197,37 @@ h2 {
 
 .hero-description {
   max-width: 34rem;
-  margin: 0 0 30px;
+  margin: 0 0 18px;
+}
+
+.health-status {
+  display: inline-flex;
+  min-height: 38px;
+  align-items: center;
+  gap: 9px;
+  margin-bottom: 24px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  padding: 0 14px;
+  background: rgb(255 255 255 / 72%);
+  color: var(--ink-2);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.health-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--sun);
+}
+
+.health-status[data-state='ready'] .health-dot {
+  background: var(--leaf);
+}
+
+.health-status[data-state='error'] .health-dot {
+  background: var(--primary-deep);
 }
 
 .market-note,
