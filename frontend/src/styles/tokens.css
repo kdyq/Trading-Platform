@@ -1,0 +1,22 @@
+:root {
+  color-scheme: light;
+  --bg: #fff6ea;
+  --card: #ffffff;
+  --ink: #2b2118;
+  --ink-2: #6b5d4f;
+  --line: #f0e0cc;
+  --primary: #ff6b35;
+  --primary-deep: #e8531f;
+  --sun: #ffc53d;
+  --leaf: #2e7d5b;
+  --leaf-soft: #e4f3ea;
+  --peach: #ffe3d2;
+  --lemon: #fff1c9;
+  --shadow: 0 10px 30px rgb(190 120 60 / 12%);
+  --shadow-hover: 0 18px 40px rgb(190 120 60 / 20%);
+  --radius-card: 16px;
+  --radius-input: 12px;
+  --radius-pill: 999px;
+  --font-body: 'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', 'Source Han Sans SC', sans-serif;
+  --font-number: 'Bahnschrift', 'DIN Alternate', 'Segoe UI', Arial, sans-serif;
+}
