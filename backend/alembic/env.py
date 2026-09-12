@@ -1,3 +1,4 @@
+import os
 from asyncio import run
 from logging.config import fileConfig
 
@@ -7,7 +8,7 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 from alembic import context
 from app import models  # noqa: F401
 from app.core.config import get_settings
-from app.db.url import database_url_for_sqlalchemy, require_project_database
+from app.db.url import database_url_for_sqlalchemy, require_project_database, require_test_schema
 from app.models import Base
 
 config = context.config
@@ -15,6 +16,13 @@ if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 target_metadata = Base.metadata
+
+
+def get_test_schema() -> str | None:
+    schema = os.getenv("DATABASE_SCHEMA")
+    if schema is not None:
+        require_test_schema(schema)
+    return schema
 
 
 def get_database_url() -> str:
@@ -50,11 +58,15 @@ def configure(connection: Connection) -> None:
 async def run_migrations_online() -> None:
     section = config.get_section(config.config_ini_section, {})
     section["sqlalchemy.url"] = get_database_url()
+    server_settings = {"timezone": "UTC"}
+    test_schema = get_test_schema()
+    if test_schema is not None:
+        server_settings["search_path"] = test_schema
     connectable = async_engine_from_config(
         section,
         prefix="sqlalchemy.",
         pool_pre_ping=True,
-        connect_args={"server_settings": {"timezone": "UTC"}},
+        connect_args={"server_settings": server_settings},
     )
     async with connectable.connect() as connection:
         await connection.run_sync(configure)

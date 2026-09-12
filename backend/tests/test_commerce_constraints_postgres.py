@@ -130,6 +130,35 @@ async def _exercise_commerce_constraints(database_url: str) -> None:
                 },
             )
 
+            first_image_id = uuid4()
+            await connection.execute(
+                text(
+                    "INSERT INTO product_images "
+                    "(id, product_id, object_key, display_order) "
+                    "VALUES (:id, :product, 'test/first.jpg', 0)"
+                ),
+                {"id": first_image_id, "product": product_id},
+            )
+            await _expect_integrity_error(
+                connection,
+                "INSERT INTO product_images "
+                "(id, product_id, object_key, display_order) "
+                "VALUES (:id, :product, 'test/duplicate.jpg', 0)",
+                {"id": uuid4(), "product": product_id},
+            )
+            await connection.execute(
+                text("UPDATE product_images SET deleted_at = now() WHERE id = :id"),
+                {"id": first_image_id},
+            )
+            await connection.execute(
+                text(
+                    "INSERT INTO product_images "
+                    "(id, product_id, object_key, display_order) "
+                    "VALUES (:id, :product, 'test/replacement.jpg', 0)"
+                ),
+                {"id": uuid4(), "product": product_id},
+            )
+
             await connection.execute(
                 text(
                     "INSERT INTO favorites (id, user_id, product_id) VALUES (:id, :user, :product)"

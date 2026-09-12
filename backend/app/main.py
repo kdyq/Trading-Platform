@@ -11,7 +11,7 @@ from app.core.config import Settings, get_settings
 from app.core.exceptions import register_exception_handlers
 from app.core.logging import configure_logging
 from app.core.middleware import RequestContextMiddleware
-from app.db.session import create_database_engine
+from app.db.session import create_database_engine, create_session_factory
 
 
 @asynccontextmanager
@@ -20,6 +20,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.database_engine = (
         create_database_engine(settings.database_url) if settings.database_url else None
     )
+    app.state.session_factory = (
+        create_session_factory(app.state.database_engine)
+        if app.state.database_engine is not None
+        else None
+    )
     app.state.redis = (
         Redis.from_url(settings.redis_url, decode_responses=True) if settings.redis_url else None
     )
@@ -27,6 +32,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     engine: AsyncEngine | None = app.state.database_engine
     redis: Redis | None = app.state.redis
+    app.state.session_factory = None
     if engine is not None:
         await engine.dispose()
     if redis is not None:

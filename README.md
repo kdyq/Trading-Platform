@@ -55,6 +55,14 @@ pnpm dev
 
 该命令依次执行后端 Ruff 格式检查、Ruff Lint、严格 mypy、pytest，以及前端类型检查、ESLint、Prettier、Vitest 和生产构建；任一步失败都会停止。
 
+第二阶段数据库门禁使用独立临时 schema，不触碰 `public` 中的数据：
+
+```powershell
+& '.\scripts\check.ps1' -Postgres
+```
+
+该模式在上述检查后执行真实 PostgreSQL 迁移往返、Alembic 漂移检查、事务与领域约束测试，并重复运行分类种子验证幂等性。连接只从进程环境或被 Git 忽略的项目 MCP 配置读取，不会回显。
+
 ## 当前边界
 
 - 首页、登录、管理端和 404 当前是工程外壳，不包含伪造的商品或账号数据。

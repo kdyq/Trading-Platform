@@ -1,5 +1,6 @@
 param(
-    [switch]$Install
+    [switch]$Install,
+    [switch]$Postgres
 )
 
 $ErrorActionPreference = 'Stop'
@@ -51,6 +52,16 @@ try {
 }
 finally {
     Pop-Location
+}
+
+if ($Postgres) {
+    Push-Location $backendPath
+    try {
+        Invoke-Checked { & $venvPython 'scripts/postgres_gate.py' }
+    }
+    finally {
+        Pop-Location
+    }
 }
 
 Push-Location $frontendPath

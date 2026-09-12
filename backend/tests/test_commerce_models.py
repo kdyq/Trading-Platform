@@ -21,6 +21,16 @@ def test_commerce_tables_are_registered() -> None:
     } <= set(Base.metadata.tables)
 
 
+def test_product_image_position_is_unique_only_while_active() -> None:
+    index = next(
+        item
+        for item in Base.metadata.tables["product_images"].indexes
+        if item.name == "uq_product_images_active_position"
+    )
+    assert index.unique is True
+    assert str(index.dialect_options["postgresql"]["where"]) == "deleted_at IS NULL"
+
+
 def test_required_product_states_exist() -> None:
     assert {status.value for status in ProductStatus} == {
         "draft",

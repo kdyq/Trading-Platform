@@ -92,9 +92,15 @@ class Product(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, VersionMixin
 class ProductImage(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, Base):
     __tablename__ = "product_images"
     __table_args__ = (
-        UniqueConstraint("product_id", "display_order", name="uq_product_images_position"),
         UniqueConstraint("object_key", name="uq_product_images_object_key"),
         CheckConstraint("display_order >= 0", name="display_order_nonnegative"),
+        Index(
+            "uq_product_images_active_position",
+            "product_id",
+            "display_order",
+            unique=True,
+            postgresql_where=text("deleted_at IS NULL"),
+        ),
     )
 
     product_id: Mapped[UUID] = mapped_column(

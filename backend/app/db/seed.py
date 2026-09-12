@@ -1,4 +1,5 @@
 import asyncio
+import os
 from collections.abc import Sequence
 
 from sqlalchemy.dialects.postgresql import insert
@@ -47,7 +48,7 @@ async def main() -> None:
         raise RuntimeError("DATABASE_URL is required for seeding")
     require_project_database(database_url)
 
-    engine = create_database_engine(database_url)
+    engine = create_database_engine(database_url, schema=os.getenv("DATABASE_SCHEMA"))
     try:
         async with engine.begin() as connection:
             await seed_categories(connection)

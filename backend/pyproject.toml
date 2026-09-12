@@ -20,5 +20,5 @@ plugins = ["pydantic.mypy"]
 exclude = ["alembic"]
 
 [[tool.mypy.overrides]]
-module = "redis.*"
+module = ["asyncpg.*", "redis.*"]
 ignore_missing_imports = true
