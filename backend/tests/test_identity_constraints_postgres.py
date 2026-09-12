@@ -22,7 +22,9 @@ def test_identity_constraints_on_postgres() -> None:
 
 async def _exercise_identity_constraints(database_url: str) -> None:
     schema = f"test_identity_{uuid4().hex}"
-    engine = create_async_engine(database_url, connect_args={"server_settings": {"timezone": "UTC"}})
+    engine = create_async_engine(
+        database_url, connect_args={"server_settings": {"timezone": "UTC"}}
+    )
     school_id = uuid4()
     campus_id = uuid4()
     first_user_id = uuid4()

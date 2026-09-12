@@ -30,9 +30,7 @@ def test_login_and_campus_email_are_separate_columns() -> None:
 def test_active_campus_email_has_a_partial_unique_index() -> None:
     table = Base.metadata.tables["campus_verifications"]
     index = next(
-        item
-        for item in table.indexes
-        if item.name == "uq_campus_verifications_active_email"
+        item for item in table.indexes if item.name == "uq_campus_verifications_active_email"
     )
 
     assert isinstance(index, Index)

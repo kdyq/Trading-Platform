@@ -54,9 +54,7 @@ role_permissions = Table(
     "role_permissions",
     Base.metadata,
     Column("role_id", ForeignKey("roles.id", ondelete="RESTRICT"), primary_key=True),
-    Column(
-        "permission_id", ForeignKey("permissions.id", ondelete="RESTRICT"), primary_key=True
-    ),
+    Column("permission_id", ForeignKey("permissions.id", ondelete="RESTRICT"), primary_key=True),
 )
 
 
@@ -117,15 +115,11 @@ class User(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, VersionMixin, B
     last_login_at: Mapped[datetime | None]
 
     roles: Mapped[list["Role"]] = relationship(secondary=user_roles, back_populates="users")
-    campus_verifications: Mapped[list["CampusVerification"]] = relationship(
-        back_populates="user"
-    )
+    campus_verifications: Mapped[list["CampusVerification"]] = relationship(back_populates="user")
     sessions: Mapped[list["UserSession"]] = relationship(back_populates="user")
 
 
-class CampusVerification(
-    UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, VersionMixin, Base
-):
+class CampusVerification(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, VersionMixin, Base):
     __tablename__ = "campus_verifications"
     __table_args__ = (
         CheckConstraint("campus_email = lower(campus_email)", name="campus_email_lowercase"),
