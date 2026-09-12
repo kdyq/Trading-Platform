@@ -4,32 +4,21 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from redis.asyncio import Redis
-from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncEngine
 
 from app.api.v1.router import api_router
 from app.core.config import Settings, get_settings
 from app.core.exceptions import register_exception_handlers
 from app.core.logging import configure_logging
 from app.core.middleware import RequestContextMiddleware
-
-
-def _database_url_for_sqlalchemy(url: str) -> str:
-    if url.startswith("postgresql://"):
-        return url.replace("postgresql://", "postgresql+asyncpg://", 1)
-    return url
+from app.db.session import create_database_engine
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     settings: Settings = app.state.settings
     app.state.database_engine = (
-        create_async_engine(
-            _database_url_for_sqlalchemy(settings.database_url),
-            pool_pre_ping=True,
-            connect_args={"server_settings": {"timezone": "UTC"}},
-        )
-        if settings.database_url
-        else None
+        create_database_engine(settings.database_url) if settings.database_url else None
     )
     app.state.redis = (
         Redis.from_url(settings.redis_url, decode_responses=True) if settings.redis_url else None

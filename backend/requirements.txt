@@ -4,4 +4,5 @@ pydantic==2.12.5
 pydantic-settings==2.14.2
 SQLAlchemy==2.0.45
 asyncpg==0.30.0
+alembic==1.17.2
 redis==6.4.0
