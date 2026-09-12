@@ -5,9 +5,10 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from alembic import context
+from app import models  # noqa: F401
 from app.core.config import get_settings
 from app.db.url import database_url_for_sqlalchemy, require_project_database
-from app.models.base import Base
+from app.models import Base
 
 config = context.config
 if config.config_file_name is not None:

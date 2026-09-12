@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID, uuid4
 
-from sqlalchemy import DateTime, MetaData, Uuid, func
+from sqlalchemy import DateTime, MetaData, Uuid, func, text
 from sqlalchemy.orm import DeclarativeBase, Mapped, declared_attr, mapped_column
 
 NAMING_CONVENTION = {
@@ -38,7 +38,7 @@ class SoftDeleteMixin:
 
 
 class VersionMixin:
-    version: Mapped[int] = mapped_column(default=1, nullable=False)
+    version: Mapped[int] = mapped_column(default=1, server_default=text("1"), nullable=False)
 
     @declared_attr.directive
     def __mapper_args__(cls) -> dict[str, Any]:
