@@ -55,6 +55,7 @@ async function submit() {
           {{ busy ? '正在登录' : '登录' }}
         </button>
       </form>
+      <p class="form-switch"><RouterLink to="/forgot-password">忘记密码？</RouterLink></p>
       <p class="form-switch">还没有账户？<RouterLink to="/register">注册普通账户</RouterLink></p>
     </div>
   </section>

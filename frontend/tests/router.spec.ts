@@ -45,6 +45,10 @@ describe('application routes', () => {
     ['/', '闲置好物'],
     ['/login', '登录拾光集市'],
     ['/register', '注册拾光集市'],
+    ['/forgot-password', '找回密码'],
+    ['/my-products', '我的发布'],
+    ['/favorites', '我的收藏'],
+    ['/orders', '我的订单'],
     ['/admin', '管理端工程已就绪'],
     ['/missing', '这个摊位还没有摆出来'],
   ])('renders %s', async (path, expectedText) => {

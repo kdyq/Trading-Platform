@@ -87,6 +87,10 @@ class TokenManager:
         token = token_urlsafe(48)
         return token, self.digest(token), datetime.now(UTC) + timedelta(days=self._refresh_days)
 
+    def issue_single_use_token(self, *, minutes: int) -> tuple[str, str, datetime]:
+        token = token_urlsafe(48)
+        return token, self.digest(token), datetime.now(UTC) + timedelta(minutes=minutes)
+
     def digest(self, token: str) -> str:
         return hmac_new(self._secret, token.encode(), sha256).hexdigest()
 

@@ -22,15 +22,7 @@ class RegisterRequest(BaseModel):
     @field_validator("display_name")
     @classmethod
     def validate_display_name(cls, value: str) -> str:
-        normalized = value.strip()
-        reserved_names = ("拾光集市", "官方", "管理员", "客服", "系统通知")
-        if not 2 <= len(normalized) <= 30 or any(
-            category(character).startswith("C") for character in normalized
-        ):
-            raise ValueError("公开昵称格式不正确")
-        if any(name.casefold() in normalized.casefold() for name in reserved_names):
-            raise ValueError("公开昵称不能冒充平台官方身份")
-        return normalized
+        return validate_display_name_value(value)
 
 
 class LoginRequest(BaseModel):
@@ -55,3 +47,15 @@ class AuthResponse(BaseModel):
 
 class MessageResponse(BaseModel):
     message: str
+
+
+def validate_display_name_value(value: str) -> str:
+    normalized = value.strip()
+    reserved_names = ("拾光集市", "官方", "管理员", "客服", "系统通知")
+    if not 2 <= len(normalized) <= 30 or any(
+        category(character).startswith("C") for character in normalized
+    ):
+        raise ValueError("公开昵称格式不正确")
+    if any(name.casefold() in normalized.casefold() for name in reserved_names):
+        raise ValueError("公开昵称不能冒充平台官方身份")
+    return normalized

@@ -41,6 +41,10 @@ class Settings(BaseSettings):
     access_token_minutes: int = Field(default=15, ge=5, le=60)
     refresh_token_days: int = Field(default=30, ge=1, le=90)
     recent_auth_minutes: int = Field(default=15, ge=5, le=60)
+    password_reset_minutes: int = Field(default=30, ge=10, le=60)
+    frontend_public_url: str = Field(
+        default="http://127.0.0.1:5173", validation_alias="FRONTEND_PUBLIC_URL"
+    )
     qq_smtp_username: str | None = Field(default=None, validation_alias="QQ_SMTP_USERNAME")
     qq_smtp_auth_code: SecretStr | None = Field(default=None, validation_alias="QQ_SMTP_AUTH_CODE")
     qq_smtp_from_name: str = Field(default="拾光集市", validation_alias="QQ_SMTP_FROM_NAME")

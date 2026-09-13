@@ -14,6 +14,7 @@ def test_identity_tables_are_registered() -> None:
         "user_roles",
         "role_permissions",
         "user_sessions",
+        "password_reset_tokens",
     } <= set(Base.metadata.tables)
 
 

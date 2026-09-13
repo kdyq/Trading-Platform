@@ -8,7 +8,7 @@ from app.api.dependencies import get_auth_service
 from app.core.config import Settings
 from app.core.security import PasswordManager, TokenManager
 from app.main import create_app
-from app.models.identity import User, UserSession, UserStatus
+from app.models.identity import PasswordResetToken, User, UserSession, UserStatus
 from app.services.auth import AuthService
 
 
@@ -16,6 +16,7 @@ class MemoryIdentityRepository:
     def __init__(self) -> None:
         self.users: dict[UUID, User] = {}
         self.sessions: dict[UUID, UserSession] = {}
+        self.password_reset_tokens: dict[UUID, PasswordResetToken] = {}
 
     async def get_user_by_email(self, email: str) -> User | None:
         return next((user for user in self.users.values() if user.login_email == email), None)
@@ -58,6 +59,72 @@ class MemoryIdentityRepository:
             if session.user_id == user_id and session.revoked_at is None:
                 session.revoked_at = at
 
+    async def update_user(self, user: User) -> None:
+        self.users[user.id] = user
+
+    async def profile_counts(self, user_id: UUID) -> tuple[int, int, int, int]:
+        return 0, 0, 0, 0
+
+    async def list_active_sessions(self, user_id: UUID) -> list[UserSession]:
+        now = datetime.now(UTC)
+        return [
+            session
+            for session in self.sessions.values()
+            if session.user_id == user_id
+            and session.revoked_at is None
+            and session.expires_at > now
+        ]
+
+    async def revoke_other_sessions(
+        self, user_id: UUID, current_session_id: UUID, *, at: datetime
+    ) -> None:
+        for session in self.sessions.values():
+            if (
+                session.user_id == user_id
+                and session.id != current_session_id
+                and session.revoked_at is None
+            ):
+                session.revoked_at = at
+
+    async def create_password_reset_token(
+        self, token: PasswordResetToken
+    ) -> PasswordResetToken:
+        self.password_reset_tokens[token.id] = token
+        return token
+
+    async def get_password_reset_token(self, digest: str) -> PasswordResetToken | None:
+        return next(
+            (
+                token
+                for token in self.password_reset_tokens.values()
+                if token.token_digest == digest
+            ),
+            None,
+        )
+
+    async def delete_password_reset_token(self, token: PasswordResetToken) -> None:
+        self.password_reset_tokens.pop(token.id, None)
+
+    async def prune_password_reset_tokens(self, user_id: UUID, *, at: datetime) -> None:
+        self.password_reset_tokens = {
+            token_id: token
+            for token_id, token in self.password_reset_tokens.items()
+            if token.user_id != user_id
+            or (token.used_at is None and token.expires_at > at)
+        }
+
+    async def retire_other_password_reset_tokens(
+        self, user_id: UUID, selected_id: UUID, *, at: datetime
+    ) -> None:
+        for token in self.password_reset_tokens.values():
+            if token.user_id == user_id and token.id != selected_id and token.used_at is None:
+                token.used_at = at
+
+    async def consume_password_reset_tokens(self, user_id: UUID, *, at: datetime) -> None:
+        for token in self.password_reset_tokens.values():
+            if token.user_id == user_id and token.used_at is None:
+                token.used_at = at
+
 
 class MemoryVerificationStore:
     def __init__(self) -> None:
@@ -83,9 +150,13 @@ class MemoryVerificationStore:
 class RecordingMailer:
     def __init__(self) -> None:
         self.messages: list[tuple[str, str]] = []
+        self.reset_messages: list[tuple[str, str]] = []
 
     async def send_verification_code(self, *, recipient: str, code: str) -> None:
         self.messages.append((recipient, code))
+
+    async def send_password_reset(self, *, recipient: str, reset_url: str) -> None:
+        self.reset_messages.append((recipient, reset_url))
 
 
 def auth_test_client(

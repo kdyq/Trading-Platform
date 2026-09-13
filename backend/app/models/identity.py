@@ -127,6 +127,9 @@ class User(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, VersionMixin, B
     roles: Mapped[list["Role"]] = relationship(secondary=user_roles, back_populates="users")
     campus_verifications: Mapped[list["CampusVerification"]] = relationship(back_populates="user")
     sessions: Mapped[list["UserSession"]] = relationship(back_populates="user")
+    password_reset_tokens: Mapped[list["PasswordResetToken"]] = relationship(
+        back_populates="user"
+    )
 
 
 class CampusVerification(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, VersionMixin, Base):
@@ -223,3 +226,19 @@ class UserSession(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     ip_address: Mapped[str | None] = mapped_column(String(64))
 
     user: Mapped[User] = relationship(back_populates="sessions")
+
+
+class PasswordResetToken(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "password_reset_tokens"
+    __table_args__ = (
+        UniqueConstraint("token_digest", name="uq_password_reset_tokens_digest"),
+        Index("ix_password_reset_tokens_user_id", "user_id"),
+        Index("ix_password_reset_tokens_expires_at", "expires_at"),
+    )
+
+    user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"))
+    token_digest: Mapped[str] = mapped_column(String(128))
+    expires_at: Mapped[datetime]
+    used_at: Mapped[datetime | None]
+
+    user: Mapped[User] = relationship(back_populates="password_reset_tokens")

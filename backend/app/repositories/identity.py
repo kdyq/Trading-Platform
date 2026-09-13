@@ -2,10 +2,12 @@ from datetime import UTC, datetime
 from typing import Protocol
 from uuid import UUID
 
-from sqlalchemy import select, update
+from sqlalchemy import delete, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.identity import User, UserSession
+from app.models.catalog import Favorite, Product, ProductStatus
+from app.models.identity import PasswordResetToken, User, UserSession
+from app.models.trade import CreditLedger, Order
 
 
 class IdentityRepository(Protocol):
@@ -26,6 +28,36 @@ class IdentityRepository(Protocol):
     async def revoke_family(self, family_id: UUID, *, at: datetime) -> None: ...
 
     async def revoke_user_sessions(self, user_id: UUID, *, at: datetime) -> None: ...
+
+
+class AccountRepository(IdentityRepository, Protocol):
+    async def update_user(self, user: User) -> None: ...
+
+    async def profile_counts(self, user_id: UUID) -> tuple[int, int, int, int]: ...
+
+    async def list_active_sessions(self, user_id: UUID) -> list[UserSession]: ...
+
+    async def revoke_other_sessions(
+        self, user_id: UUID, current_session_id: UUID, *, at: datetime
+    ) -> None: ...
+
+    async def create_password_reset_token(
+        self, token: PasswordResetToken
+    ) -> PasswordResetToken: ...
+
+    async def get_password_reset_token(self, digest: str) -> PasswordResetToken | None: ...
+
+    async def delete_password_reset_token(self, token: PasswordResetToken) -> None: ...
+
+    async def prune_password_reset_tokens(self, user_id: UUID, *, at: datetime) -> None: ...
+
+    async def retire_other_password_reset_tokens(
+        self, user_id: UUID, selected_id: UUID, *, at: datetime
+    ) -> None: ...
+
+    async def consume_password_reset_tokens(
+        self, user_id: UUID, *, at: datetime
+    ) -> None: ...
 
 
 class SqlAlchemyIdentityRepository:
@@ -83,6 +115,119 @@ class SqlAlchemyIdentityRepository:
             update(UserSession)
             .where(UserSession.user_id == user_id, UserSession.revoked_at.is_(None))
             .values(revoked_at=at, last_used_at=at)
+        )
+
+    async def update_user(self, user: User) -> None:
+        self._session.add(user)
+        await self._session.flush()
+
+    async def profile_counts(self, user_id: UUID) -> tuple[int, int, int, int]:
+        product_count = await self._session.scalar(
+            select(func.count()).select_from(Product).where(
+                Product.seller_id == user_id,
+                Product.status == ProductStatus.ON_SALE,
+                Product.deleted_at.is_(None),
+            )
+        )
+        favorite_count = await self._session.scalar(
+            select(func.count()).select_from(Favorite).where(Favorite.user_id == user_id)
+        )
+        order_count = await self._session.scalar(
+            select(func.count())
+            .select_from(Order)
+            .where(or_(Order.buyer_id == user_id, Order.seller_id == user_id))
+        )
+        credit_event_count = await self._session.scalar(
+            select(func.count())
+            .select_from(CreditLedger)
+            .where(CreditLedger.user_id == user_id)
+        )
+        return (
+            int(product_count or 0),
+            int(favorite_count or 0),
+            int(order_count or 0),
+            int(credit_event_count or 0),
+        )
+
+    async def list_active_sessions(self, user_id: UUID) -> list[UserSession]:
+        now = datetime.now(UTC)
+        result = await self._session.execute(
+            select(UserSession)
+            .where(
+                UserSession.user_id == user_id,
+                UserSession.revoked_at.is_(None),
+                UserSession.expires_at > now,
+            )
+            .order_by(UserSession.created_at.desc())
+        )
+        return list(result.scalars())
+
+    async def revoke_other_sessions(
+        self, user_id: UUID, current_session_id: UUID, *, at: datetime
+    ) -> None:
+        await self._session.execute(
+            update(UserSession)
+            .where(
+                UserSession.user_id == user_id,
+                UserSession.id != current_session_id,
+                UserSession.revoked_at.is_(None),
+            )
+            .values(revoked_at=at, last_used_at=at)
+        )
+
+    async def create_password_reset_token(
+        self, token: PasswordResetToken
+    ) -> PasswordResetToken:
+        self._session.add(token)
+        await self._session.flush()
+        return token
+
+    async def get_password_reset_token(self, digest: str) -> PasswordResetToken | None:
+        result = await self._session.execute(
+            select(PasswordResetToken)
+            .where(PasswordResetToken.token_digest == digest)
+            .with_for_update()
+        )
+        return result.scalar_one_or_none()
+
+    async def delete_password_reset_token(self, token: PasswordResetToken) -> None:
+        await self._session.delete(token)
+        await self._session.flush()
+
+    async def prune_password_reset_tokens(self, user_id: UUID, *, at: datetime) -> None:
+        await self._session.execute(
+            delete(PasswordResetToken).where(
+                PasswordResetToken.user_id == user_id,
+                or_(
+                    PasswordResetToken.used_at.is_not(None),
+                    PasswordResetToken.expires_at <= at,
+                ),
+            )
+        )
+
+    async def retire_other_password_reset_tokens(
+        self, user_id: UUID, selected_id: UUID, *, at: datetime
+    ) -> None:
+        await self._session.execute(
+            update(PasswordResetToken)
+            .where(
+                PasswordResetToken.user_id == user_id,
+                PasswordResetToken.id != selected_id,
+                PasswordResetToken.used_at.is_(None),
+            )
+            .values(used_at=at)
+        )
+
+    async def consume_password_reset_tokens(
+        self, user_id: UUID, *, at: datetime
+    ) -> None:
+        await self._session.execute(
+            update(PasswordResetToken)
+            .where(
+                PasswordResetToken.user_id == user_id,
+                PasswordResetToken.used_at.is_(None),
+            )
+            .values(used_at=at)
         )
 
 

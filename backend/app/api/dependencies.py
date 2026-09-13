@@ -8,7 +8,12 @@ from app.core.config import Settings
 from app.core.exceptions import AppError
 from app.core.security import PasswordManager, TokenManager
 from app.db.session import get_database_session
-from app.repositories.identity import IdentityRepository, SqlAlchemyIdentityRepository
+from app.repositories.identity import (
+    AccountRepository,
+    IdentityRepository,
+    SqlAlchemyIdentityRepository,
+)
+from app.services.account import AccountService
 from app.services.auth import AuthService
 from app.services.email_verification import (
     RedisVerificationCodeStore,
@@ -16,7 +21,9 @@ from app.services.email_verification import (
     VerificationCodeStore,
 )
 from app.services.mailer import (
+    AccountMailer,
     QQVerificationMailer,
+    UnavailableAccountMailer,
     UnavailableVerificationMailer,
     VerificationMailer,
 )
@@ -29,6 +36,12 @@ def get_settings_from_request(request: Request) -> Settings:
 def get_identity_repository(
     session: Annotated[AsyncSession, Depends(get_database_session)],
 ) -> IdentityRepository:
+    return SqlAlchemyIdentityRepository(session)
+
+
+def get_account_repository(
+    session: Annotated[AsyncSession, Depends(get_database_session)],
+) -> AccountRepository:
     return SqlAlchemyIdentityRepository(session)
 
 
@@ -79,6 +92,18 @@ def get_verification_mailer(
     )
 
 
+def get_account_mailer(
+    settings: Annotated[Settings, Depends(get_settings_from_request)],
+) -> AccountMailer:
+    if settings.qq_smtp_username is None or settings.qq_smtp_auth_code is None:
+        return UnavailableAccountMailer()
+    return QQVerificationMailer(
+        username=settings.qq_smtp_username,
+        auth_code=settings.qq_smtp_auth_code.get_secret_value(),
+        from_name=settings.qq_smtp_from_name,
+    )
+
+
 def get_auth_service(
     repository: Annotated[IdentityRepository, Depends(get_identity_repository)],
     verification_store: Annotated[VerificationCodeStore, Depends(get_verification_store)],
@@ -90,6 +115,24 @@ def get_auth_service(
     return AuthService(
         repository=repository,
         verification_store=verification_store,
+        mailer=mailer,
+        password_manager=password_manager,
+        token_manager=token_manager,
+        settings=settings,
+    )
+
+
+def get_account_service(
+    repository: Annotated[AccountRepository, Depends(get_account_repository)],
+    request_limiter: Annotated[VerificationCodeStore, Depends(get_verification_store)],
+    mailer: Annotated[AccountMailer, Depends(get_account_mailer)],
+    password_manager: Annotated[PasswordManager, Depends(get_password_manager)],
+    token_manager: Annotated[TokenManager, Depends(get_token_manager)],
+    settings: Annotated[Settings, Depends(get_settings_from_request)],
+) -> AccountService:
+    return AccountService(
+        repository=repository,
+        request_limiter=request_limiter,
         mailer=mailer,
         password_manager=password_manager,
         token_manager=token_manager,

@@ -1,5 +1,15 @@
 <script setup lang="ts">
-import { RouterLink, RouterView } from 'vue-router'
+import { RouterLink, RouterView, useRouter } from 'vue-router'
+
+import { useAuthStore } from '../stores/auth'
+
+const auth = useAuthStore()
+const router = useRouter()
+
+async function logout() {
+  await auth.logout()
+  await router.push('/')
+}
 </script>
 
 <template>
@@ -9,7 +19,13 @@ import { RouterLink, RouterView } from 'vue-router'
         <RouterLink class="wordmark" to="/"> 拾光集市 </RouterLink>
         <div class="navigation-actions">
           <RouterLink class="navigation-link" to="/"> 逛好物 </RouterLink>
-          <RouterLink class="button button-primary" to="/login"> 登录 </RouterLink>
+          <template v-if="auth.user">
+            <RouterLink class="navigation-link" to="/account">
+              {{ auth.user.display_name }}
+            </RouterLink>
+            <button class="button button-ghost" type="button" @click="logout">退出</button>
+          </template>
+          <RouterLink v-else class="button button-primary" to="/login"> 登录 </RouterLink>
         </div>
       </nav>
     </header>
