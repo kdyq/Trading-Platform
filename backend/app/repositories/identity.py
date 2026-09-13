@@ -6,7 +6,15 @@ from sqlalchemy import delete, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.catalog import Favorite, Product, ProductStatus
-from app.models.identity import PasswordResetToken, User, UserSession
+from app.models.identity import (
+    CampusAppealStatus,
+    CampusVerification,
+    CampusVerificationAppeal,
+    CampusVerificationStatus,
+    PasswordResetToken,
+    User,
+    UserSession,
+)
 from app.models.trade import CreditLedger, Order
 
 
@@ -28,6 +36,8 @@ class IdentityRepository(Protocol):
     async def revoke_family(self, family_id: UUID, *, at: datetime) -> None: ...
 
     async def revoke_user_sessions(self, user_id: UUID, *, at: datetime) -> None: ...
+
+    async def get_campus_verification_status(self, user_id: UUID) -> CampusVerificationStatus: ...
 
 
 class AccountRepository(IdentityRepository, Protocol):
@@ -55,9 +65,7 @@ class AccountRepository(IdentityRepository, Protocol):
         self, user_id: UUID, selected_id: UUID, *, at: datetime
     ) -> None: ...
 
-    async def consume_password_reset_tokens(
-        self, user_id: UUID, *, at: datetime
-    ) -> None: ...
+    async def consume_password_reset_tokens(self, user_id: UUID, *, at: datetime) -> None: ...
 
 
 class SqlAlchemyIdentityRepository:
@@ -117,13 +125,63 @@ class SqlAlchemyIdentityRepository:
             .values(revoked_at=at, last_used_at=at)
         )
 
+    async def get_campus_verification_status(self, user_id: UUID) -> CampusVerificationStatus:
+        verification_result = await self._session.execute(
+            select(CampusVerification)
+            .where(
+                CampusVerification.user_id == user_id,
+                CampusVerification.deleted_at.is_(None),
+            )
+            .order_by(CampusVerification.created_at.desc())
+            .limit(1)
+        )
+        verification = verification_result.scalar_one_or_none()
+        now = datetime.now(UTC)
+        effective_status = (
+            verification.status if verification is not None else CampusVerificationStatus.UNAPPLIED
+        )
+        if verification is not None and verification.status == CampusVerificationStatus.VERIFIED:
+            expires_at = verification.expires_at
+            if expires_at is not None and expires_at.tzinfo is None:
+                expires_at = expires_at.replace(tzinfo=UTC)
+            if expires_at is not None and expires_at > now:
+                return CampusVerificationStatus.VERIFIED
+            await self._session.execute(
+                update(CampusVerification)
+                .where(
+                    CampusVerification.id == verification.id,
+                    CampusVerification.status == CampusVerificationStatus.VERIFIED,
+                    CampusVerification.expires_at <= now,
+                    CampusVerification.deleted_at.is_(None),
+                )
+                .values(
+                    status=CampusVerificationStatus.EXPIRED,
+                    version=CampusVerification.version + 1,
+                )
+            )
+            effective_status = CampusVerificationStatus.EXPIRED
+
+        appeal_result = await self._session.execute(
+            select(CampusVerificationAppeal.id)
+            .where(
+                CampusVerificationAppeal.user_id == user_id,
+                CampusVerificationAppeal.status == CampusAppealStatus.PENDING,
+            )
+            .limit(1)
+        )
+        if appeal_result.scalar_one_or_none() is not None:
+            return CampusVerificationStatus.APPEALING
+        return effective_status
+
     async def update_user(self, user: User) -> None:
         self._session.add(user)
         await self._session.flush()
 
     async def profile_counts(self, user_id: UUID) -> tuple[int, int, int, int]:
         product_count = await self._session.scalar(
-            select(func.count()).select_from(Product).where(
+            select(func.count())
+            .select_from(Product)
+            .where(
                 Product.seller_id == user_id,
                 Product.status == ProductStatus.ON_SALE,
                 Product.deleted_at.is_(None),
@@ -138,9 +196,7 @@ class SqlAlchemyIdentityRepository:
             .where(or_(Order.buyer_id == user_id, Order.seller_id == user_id))
         )
         credit_event_count = await self._session.scalar(
-            select(func.count())
-            .select_from(CreditLedger)
-            .where(CreditLedger.user_id == user_id)
+            select(func.count()).select_from(CreditLedger).where(CreditLedger.user_id == user_id)
         )
         return (
             int(product_count or 0),
@@ -175,9 +231,7 @@ class SqlAlchemyIdentityRepository:
             .values(revoked_at=at, last_used_at=at)
         )
 
-    async def create_password_reset_token(
-        self, token: PasswordResetToken
-    ) -> PasswordResetToken:
+    async def create_password_reset_token(self, token: PasswordResetToken) -> PasswordResetToken:
         self._session.add(token)
         await self._session.flush()
         return token
@@ -218,9 +272,7 @@ class SqlAlchemyIdentityRepository:
             .values(used_at=at)
         )
 
-    async def consume_password_reset_tokens(
-        self, user_id: UUID, *, at: datetime
-    ) -> None:
+    async def consume_password_reset_tokens(self, user_id: UUID, *, at: datetime) -> None:
         await self._session.execute(
             update(PasswordResetToken)
             .where(

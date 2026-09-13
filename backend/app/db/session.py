@@ -1,5 +1,6 @@
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
+from typing import cast
 
 from fastapi import Request
 from sqlalchemy.ext.asyncio import (
@@ -38,8 +39,19 @@ async def transaction_scope(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> AsyncIterator[AsyncSession]:
     async with session_factory() as session:
-        async with session.begin():
-            yield session
+        try:
+            async with session.begin():
+                yield session
+        except BaseException:
+            callbacks = cast(
+                list[Callable[[], None]],
+                session.info.pop("rollback_callbacks", []),
+            )
+            for callback in reversed(callbacks):
+                callback()
+            raise
+        else:
+            session.info.pop("rollback_callbacks", None)
 
 
 async def session_scope(

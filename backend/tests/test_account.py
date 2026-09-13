@@ -1,9 +1,11 @@
 import asyncio
 from datetime import UTC, datetime, timedelta
+from typing import cast
 from unittest.mock import AsyncMock
 from urllib.parse import parse_qs, urlparse
 from uuid import uuid4
 
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.api.dependencies import get_account_service
@@ -32,7 +34,9 @@ def account_client() -> tuple[
     PasswordManager,
 ]:
     client, repository, limiter, mailer = auth_test_client()
-    settings = client.app.state.settings
+    app = cast(FastAPI, client.app)
+    settings = cast(Settings, app.state.settings)
+    assert settings.auth_secret_key is not None
     password_manager = PasswordManager()
     service = AccountService(
         repository=repository,
@@ -46,7 +50,7 @@ def account_client() -> tuple[
         ),
         settings=settings,
     )
-    client.app.dependency_overrides[get_account_service] = lambda: service
+    app.dependency_overrides[get_account_service] = lambda: service
     return client, repository, mailer, password_manager
 
 
@@ -210,6 +214,7 @@ def test_mail_failure_does_not_destroy_previous_reset_token() -> None:
         auth_secret_key="test-secret-key-that-is-longer-than-32-characters",
     )
     password_manager = PasswordManager()
+    assert settings.auth_secret_key is not None
     token_manager = TokenManager(
         settings.auth_secret_key.get_secret_value(), access_minutes=15, refresh_days=30
     )

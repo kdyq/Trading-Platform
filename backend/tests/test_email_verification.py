@@ -18,6 +18,19 @@ class MemoryRedis:
     async def eval(self, script: str, numkeys: int, *arguments: object) -> int:
         keys = [str(value) for value in arguments[:numkeys]]
         args = [str(value) for value in arguments[numkeys:]]
+        if "reserve-verification-limit" in script:
+            cooldown_key, hourly_key = keys
+            if cooldown_key in self.values:
+                return -1
+            self.values[cooldown_key] = "1"
+            self.ttls[cooldown_key] = int(args[0])
+            hourly_count = int(self.values.get(hourly_key, "0")) + 1
+            self.values[hourly_key] = str(hourly_count)
+            if hourly_count == 1:
+                self.ttls[hourly_key] = int(args[1])
+            if hourly_count > int(args[2]):
+                return -2
+            return 1
         if "issue-verification" in script:
             cooldown_key, hourly_key, code_key = keys
             if cooldown_key in self.values:
@@ -142,3 +155,15 @@ async def check_concurrent_consumption_has_one_winner() -> None:
 
 def test_concurrent_consumption_has_one_winner() -> None:
     run(check_concurrent_consumption_has_one_winner())
+
+
+def test_stable_limit_is_independent_from_code_purpose() -> None:
+    async def exercise() -> None:
+        store = RedisVerificationCodeStore(cast(Redis, MemoryRedis()), "test-secret")
+        await store.limit(subject="student@campus.edu", scope="campus-email")
+        await store.issue(email="student@campus.edu", purpose="campus:first-request")
+        with pytest.raises(AppError) as blocked:
+            await store.limit(subject="student@campus.edu", scope="campus-email")
+        assert blocked.value.code == "verification_too_frequent"
+
+    run(exercise())

@@ -42,9 +42,7 @@ async def deliver_password_reset_with_service(
 
 async def deliver_password_reset(app: FastAPI, email: str, ip_address: str | None) -> None:
     settings = cast(Settings, app.state.settings)
-    session_factory = cast(
-        async_sessionmaker[AsyncSession] | None, app.state.session_factory
-    )
+    session_factory = cast(async_sessionmaker[AsyncSession] | None, app.state.session_factory)
     redis = cast(Redis | None, app.state.redis)
     if (
         session_factory is None
@@ -83,9 +81,7 @@ async def deliver_password_reset(app: FastAPI, email: str, ip_address: str | Non
         logger.exception("password_reset_background_failure")
 
 
-async def profile_response(
-    context: AuthContext, service: AccountService
-) -> ProfileResponse:
+async def profile_response(context: AuthContext, service: AccountService) -> ProfileResponse:
     active_products, favorites, orders, credit_events = await service.profile_counts(
         context.user.id
     )
@@ -94,7 +90,7 @@ async def profile_response(
         login_email=context.user.login_email,
         display_name=context.user.display_name,
         has_avatar=context.user.avatar_key is not None,
-        campus_verification_status="unapplied",
+        campus_verification_status=context.campus_verification_status.value,
         credit_status="recorded" if credit_events else "no_record",
         active_products=active_products,
         favorites=favorites,

@@ -474,6 +474,81 @@ h2 {
   margin-left: 6px;
 }
 
+.identity-action,
+.text-button {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--primary-deep);
+  font-weight: 800;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.identity-action {
+  display: block;
+  width: fit-content;
+  margin-top: 12px;
+  font-size: 13px;
+}
+
+.text-button {
+  cursor: pointer;
+}
+
+.campus-page {
+  min-height: calc(100dvh - 148px);
+  padding-block: 64px 88px;
+}
+
+.trust-panel {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  margin-bottom: 20px;
+  border: 1px solid #9ac8b2;
+  border-radius: var(--radius-card);
+  padding: 28px;
+  background: var(--leaf-soft);
+}
+
+.trust-panel h2,
+.trust-panel p {
+  margin-bottom: 6px;
+}
+
+.trust-seal {
+  display: grid;
+  width: 76px;
+  height: 76px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 2px solid var(--leaf);
+  border-radius: 50%;
+  color: var(--leaf);
+  font-size: 30px;
+  font-weight: 900;
+}
+
+.campus-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+}
+
+.campus-grid > :last-child:nth-child(odd) {
+  grid-column: 1 / -1;
+}
+
+.campus-empty {
+  margin-inline: auto;
+}
+
+.field textarea {
+  min-height: 120px;
+  resize: vertical;
+}
+
 .account-shortcuts {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -696,6 +771,19 @@ h2 {
 
   .account-shortcuts {
     grid-template-columns: 1fr;
+  }
+
+  .campus-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .campus-grid > :last-child:nth-child(odd) {
+    grid-column: auto;
+  }
+
+  .trust-panel {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .stats-panel {

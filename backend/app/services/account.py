@@ -35,9 +35,7 @@ class AccountService:
 
     async def request_password_reset(self, email: str, *, ip_address: str | None) -> None:
         normalized_email = normalize_email(email)
-        await self._request_limiter.issue(
-            email=normalized_email, purpose="password-reset-email"
-        )
+        await self._request_limiter.issue(email=normalized_email, purpose="password-reset-email")
         try:
             await self._request_limiter.issue(
                 email=ip_address or "unknown", purpose="password-reset-ip"
@@ -66,9 +64,7 @@ class AccountService:
         query = urlencode({"token": raw_token})
         reset_url = f"{self._settings.frontend_public_url.rstrip('/')}/forgot-password?{query}"
         try:
-            await self._mailer.send_password_reset(
-                recipient=user.login_email, reset_url=reset_url
-            )
+            await self._mailer.send_password_reset(recipient=user.login_email, reset_url=reset_url)
         except AppError as exc:
             await self._repository.delete_password_reset_token(token)
             logger.warning("password_reset_email_delivery_failed", extra={"error_code": exc.code})

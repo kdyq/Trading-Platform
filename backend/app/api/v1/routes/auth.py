@@ -23,13 +23,13 @@ bearer = HTTPBearer(auto_error=False)
 REFRESH_COOKIE = "shiguang_refresh"
 
 
-def user_summary(user: User) -> UserSummary:
+def user_summary(user: User, campus_status: str) -> UserSummary:
     return UserSummary(
         id=user.id,
         login_email=user.login_email,
         display_name=user.display_name,
         status=user.status.value,
-        campus_verification_status="unapplied",
+        campus_verification_status=campus_status,
     )
 
 
@@ -56,7 +56,7 @@ def auth_response(result: AuthResult) -> AuthResponse:
     return AuthResponse(
         access_token=result.access_token,
         access_token_expires_at=result.access_token_expires_at,
-        user=user_summary(result.user),
+        user=user_summary(result.user, result.campus_verification_status.value),
     )
 
 
@@ -172,4 +172,4 @@ async def logout_all(
 
 @router.get("/me", response_model=UserSummary)
 async def me(context: Annotated[AuthContext, Depends(get_auth_context)]) -> UserSummary:
-    return user_summary(context.user)
+    return user_summary(context.user, context.campus_verification_status.value)

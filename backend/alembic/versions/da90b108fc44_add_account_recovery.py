@@ -46,12 +46,8 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id", name="pk_password_reset_tokens"),
         sa.UniqueConstraint("token_digest", name="uq_password_reset_tokens_digest"),
     )
-    op.create_index(
-        "ix_password_reset_tokens_user_id", "password_reset_tokens", ["user_id"]
-    )
-    op.create_index(
-        "ix_password_reset_tokens_expires_at", "password_reset_tokens", ["expires_at"]
-    )
+    op.create_index("ix_password_reset_tokens_user_id", "password_reset_tokens", ["user_id"])
+    op.create_index("ix_password_reset_tokens_expires_at", "password_reset_tokens", ["expires_at"])
 
 
 def downgrade() -> None:

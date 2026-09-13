@@ -1,6 +1,6 @@
 from sqlalchemy import CheckConstraint, Index
 
-from app.models import Base, CampusVerificationStatus
+from app.models import Base, CampusAppealStatus, CampusVerificationStatus
 
 
 def test_identity_tables_are_registered() -> None:
@@ -15,6 +15,8 @@ def test_identity_tables_are_registered() -> None:
         "role_permissions",
         "user_sessions",
         "password_reset_tokens",
+        "school_email_domains",
+        "campus_verification_appeals",
     } <= set(Base.metadata.tables)
 
 
@@ -56,6 +58,14 @@ def test_required_verification_states_exist() -> None:
         "rejected",
         "expired",
         "appealing",
+    }
+
+
+def test_required_appeal_states_exist() -> None:
+    assert {status.value for status in CampusAppealStatus} == {
+        "pending",
+        "approved",
+        "rejected",
     }
 
 

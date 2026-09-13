@@ -14,6 +14,10 @@ class AccountMailer(Protocol):
     async def send_password_reset(self, *, recipient: str, reset_url: str) -> None: ...
 
 
+class CampusMailer(Protocol):
+    async def send_campus_verification_code(self, *, recipient: str, code: str) -> None: ...
+
+
 class UnavailableVerificationMailer:
     async def send_verification_code(self, *, recipient: str, code: str) -> None:
         raise AppError(
@@ -29,6 +33,15 @@ class UnavailableAccountMailer:
             status_code=503,
             code="email_delivery_unavailable",
             message="账户邮件服务尚未配置",
+        )
+
+
+class UnavailableCampusMailer:
+    async def send_campus_verification_code(self, *, recipient: str, code: str) -> None:
+        raise AppError(
+            status_code=503,
+            code="email_delivery_unavailable",
+            message="校园认证邮件服务尚未配置",
         )
 
 
@@ -54,6 +67,14 @@ class QQVerificationMailer:
         message.set_content(
             f"请在 30 分钟内打开以下地址重置密码：\n{reset_url}\n如果不是你本人操作，请忽略此邮件。"
         )
+        await self._send(message)
+
+    async def send_campus_verification_code(self, *, recipient: str, code: str) -> None:
+        message = EmailMessage()
+        message["From"] = f"{self._from_name} <{self._username}>"
+        message["To"] = recipient
+        message["Subject"] = "拾光集市校园认证验证码"
+        message.set_content(f"你的校园认证验证码是 {code}，10 分钟内有效。请勿转发给他人。")
         await self._send(message)
 
     async def _send(self, message: EmailMessage) -> None:

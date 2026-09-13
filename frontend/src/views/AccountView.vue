@@ -138,6 +138,7 @@ onMounted(load)
             <span class="status-chip">
               信用状态：{{ profile.credit_status === 'recorded' ? '已有记录' : '暂无记录' }}
             </span>
+            <RouterLink class="identity-action" to="/campus-verification">管理校园认证</RouterLink>
           </div>
         </article>
         <article class="account-panel stats-panel" aria-label="账户统计">

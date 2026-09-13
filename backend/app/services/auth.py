@@ -7,7 +7,7 @@ from sqlalchemy.exc import IntegrityError
 from app.core.config import Settings
 from app.core.exceptions import AppError
 from app.core.security import AccessClaims, PasswordManager, TokenManager, validate_password
-from app.models.identity import User, UserSession, UserStatus
+from app.models.identity import CampusVerificationStatus, User, UserSession, UserStatus
 from app.repositories.identity import IdentityRepository, session_is_active
 from app.services.email_verification import VerificationCodeStore
 from app.services.mailer import VerificationMailer
@@ -19,6 +19,7 @@ class AuthResult:
     access_token: str
     access_token_expires_at: datetime
     refresh_token: str
+    campus_verification_status: CampusVerificationStatus
 
 
 @dataclass(frozen=True)
@@ -26,6 +27,7 @@ class AuthContext:
     user: User
     session: UserSession
     claims: AccessClaims
+    campus_verification_status: CampusVerificationStatus
 
 
 class AuthService:
@@ -169,7 +171,8 @@ class AuthService:
             session_id=successor.id,
             authenticated_at=current.authenticated_at,
         )
-        return AuthResult(user, access, access_expires_at, refresh)
+        campus_status = await self._repository.get_campus_verification_status(user.id)
+        return AuthResult(user, access, access_expires_at, refresh, campus_status)
 
     async def authenticate(self, access_token: str) -> AuthContext:
         claims = self._token_manager.decode_access_token(access_token)
@@ -185,7 +188,13 @@ class AuthService:
             raise AppError(
                 status_code=401, code="invalid_access_token", message="登录状态无效或已过期"
             )
-        return AuthContext(user=user, session=session, claims=claims)
+        campus_status = await self._repository.get_campus_verification_status(user.id)
+        return AuthContext(
+            user=user,
+            session=session,
+            claims=claims,
+            campus_verification_status=campus_status,
+        )
 
     async def logout(self, refresh_token: str) -> None:
         session = await self._repository.get_session_by_digest(
@@ -224,7 +233,8 @@ class AuthService:
             session_id=session.id,
             authenticated_at=authenticated_at,
         )
-        return AuthResult(user, access, access_expires_at, refresh)
+        campus_status = await self._repository.get_campus_verification_status(user.id)
+        return AuthResult(user, access, access_expires_at, refresh, campus_status)
 
 
 def normalize_email(email: str) -> str:

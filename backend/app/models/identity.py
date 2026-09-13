@@ -42,6 +42,12 @@ class CampusVerificationStatus(StrEnum):
     APPEALING = "appealing"
 
 
+class CampusAppealStatus(StrEnum):
+    PENDING = "pending"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+
+
 user_roles = Table(
     "user_roles",
     Base.metadata,
@@ -70,6 +76,25 @@ class School(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, VersionMixin,
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default=text("true"))
 
     campuses: Mapped[list["Campus"]] = relationship(back_populates="school")
+    email_domains: Mapped[list["SchoolEmailDomain"]] = relationship(back_populates="school")
+
+
+class SchoolEmailDomain(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "school_email_domains"
+    __table_args__ = (
+        CheckConstraint("domain = lower(domain)", name="domain_lowercase"),
+        UniqueConstraint("domain", name="uq_school_email_domains_domain"),
+        Index("ix_school_email_domains_school_id", "school_id"),
+    )
+
+    school_id: Mapped[UUID] = mapped_column(ForeignKey("schools.id", ondelete="RESTRICT"))
+    domain: Mapped[str] = mapped_column(String(255))
+    allow_subdomains: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=text("false")
+    )
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default=text("true"))
+
+    school: Mapped[School] = relationship(back_populates="email_domains")
 
 
 class Campus(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, VersionMixin, Base):
@@ -88,6 +113,9 @@ class Campus(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, VersionMixin,
 
     school: Mapped[School] = relationship(back_populates="campuses")
     verifications: Mapped[list["CampusVerification"]] = relationship(back_populates="campus")
+    verification_appeals: Mapped[list["CampusVerificationAppeal"]] = relationship(
+        back_populates="campus"
+    )
 
 
 class User(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, VersionMixin, Base):
@@ -127,8 +155,9 @@ class User(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, VersionMixin, B
     roles: Mapped[list["Role"]] = relationship(secondary=user_roles, back_populates="users")
     campus_verifications: Mapped[list["CampusVerification"]] = relationship(back_populates="user")
     sessions: Mapped[list["UserSession"]] = relationship(back_populates="user")
-    password_reset_tokens: Mapped[list["PasswordResetToken"]] = relationship(
-        back_populates="user"
+    password_reset_tokens: Mapped[list["PasswordResetToken"]] = relationship(back_populates="user")
+    campus_verification_appeals: Mapped[list["CampusVerificationAppeal"]] = relationship(
+        foreign_keys="CampusVerificationAppeal.user_id", back_populates="user"
     )
 
 
@@ -177,6 +206,51 @@ class CampusVerification(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, V
 
     user: Mapped[User] = relationship(back_populates="campus_verifications")
     campus: Mapped[Campus] = relationship(back_populates="verifications")
+
+
+class CampusVerificationAppeal(UUIDPrimaryKeyMixin, TimestampMixin, VersionMixin, Base):
+    __tablename__ = "campus_verification_appeals"
+    __table_args__ = (
+        CheckConstraint("size_bytes > 0", name="material_size_positive"),
+        Index("ix_campus_verification_appeals_user_id", "user_id"),
+        Index("ix_campus_verification_appeals_status", "status"),
+        Index("ix_campus_verification_appeals_retention_until", "retention_until"),
+        Index(
+            "uq_campus_verification_appeals_pending_user",
+            "user_id",
+            unique=True,
+            postgresql_where=text("status = 'pending'"),
+        ),
+    )
+
+    user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"))
+    campus_id: Mapped[UUID] = mapped_column(ForeignKey("campuses.id", ondelete="RESTRICT"))
+    status: Mapped[CampusAppealStatus] = mapped_column(
+        Enum(
+            CampusAppealStatus,
+            values_callable=lambda members: [member.value for member in members],
+            native_enum=False,
+            create_constraint=True,
+            name="campus_appeal_status",
+        ),
+        default=CampusAppealStatus.PENDING,
+        server_default=CampusAppealStatus.PENDING.value,
+    )
+    reason: Mapped[str] = mapped_column(Text)
+    material_key: Mapped[str] = mapped_column(String(512), unique=True)
+    original_filename: Mapped[str] = mapped_column(String(255))
+    media_type: Mapped[str] = mapped_column(String(80))
+    size_bytes: Mapped[int]
+    retention_until: Mapped[datetime]
+    reviewed_at: Mapped[datetime | None]
+    reviewer_id: Mapped[UUID | None] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"))
+    review_reason: Mapped[str | None] = mapped_column(Text)
+
+    user: Mapped[User] = relationship(
+        foreign_keys=[user_id], back_populates="campus_verification_appeals"
+    )
+    campus: Mapped[Campus] = relationship(back_populates="verification_appeals")
+    reviewer: Mapped[User | None] = relationship(foreign_keys=[reviewer_id])
 
 
 class Role(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, VersionMixin, Base):

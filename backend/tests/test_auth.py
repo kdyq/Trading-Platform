@@ -8,7 +8,13 @@ from app.api.dependencies import get_auth_service
 from app.core.config import Settings
 from app.core.security import PasswordManager, TokenManager
 from app.main import create_app
-from app.models.identity import PasswordResetToken, User, UserSession, UserStatus
+from app.models.identity import (
+    CampusVerificationStatus,
+    PasswordResetToken,
+    User,
+    UserSession,
+    UserStatus,
+)
 from app.services.auth import AuthService
 
 
@@ -59,6 +65,9 @@ class MemoryIdentityRepository:
             if session.user_id == user_id and session.revoked_at is None:
                 session.revoked_at = at
 
+    async def get_campus_verification_status(self, user_id: UUID) -> CampusVerificationStatus:
+        return CampusVerificationStatus.UNAPPLIED
+
     async def update_user(self, user: User) -> None:
         self.users[user.id] = user
 
@@ -86,9 +95,7 @@ class MemoryIdentityRepository:
             ):
                 session.revoked_at = at
 
-    async def create_password_reset_token(
-        self, token: PasswordResetToken
-    ) -> PasswordResetToken:
+    async def create_password_reset_token(self, token: PasswordResetToken) -> PasswordResetToken:
         self.password_reset_tokens[token.id] = token
         return token
 
@@ -109,8 +116,7 @@ class MemoryIdentityRepository:
         self.password_reset_tokens = {
             token_id: token
             for token_id, token in self.password_reset_tokens.items()
-            if token.user_id != user_id
-            or (token.used_at is None and token.expires_at > at)
+            if token.user_id != user_id or (token.used_at is None and token.expires_at > at)
         }
 
     async def retire_other_password_reset_tokens(
@@ -129,6 +135,10 @@ class MemoryIdentityRepository:
 class MemoryVerificationStore:
     def __init__(self) -> None:
         self.codes: dict[tuple[str, str], str] = {}
+        self.limits: list[tuple[str, str]] = []
+
+    async def limit(self, *, subject: str, scope: str) -> None:
+        self.limits.append((subject, scope))
 
     async def issue(self, *, email: str, purpose: str) -> str:
         self.codes[(email, purpose)] = "123456"

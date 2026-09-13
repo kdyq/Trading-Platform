@@ -25,6 +25,21 @@ redis.call('EXPIRE', KEYS[3], ARGV[5])
 return 1
 """
 
+LIMIT_SCRIPT = """
+-- reserve-verification-limit
+if not redis.call('SET', KEYS[1], '1', 'EX', ARGV[1], 'NX') then
+  return -1
+end
+local count = redis.call('INCR', KEYS[2])
+if count == 1 then
+  redis.call('EXPIRE', KEYS[2], ARGV[2])
+end
+if count > tonumber(ARGV[3]) then
+  return -2
+end
+return 1
+"""
+
 CONSUME_SCRIPT = """
 -- consume-verification
 if redis.call('EXISTS', KEYS[1]) == 0 then
@@ -43,6 +58,8 @@ return 0
 
 
 class VerificationCodeStore(Protocol):
+    async def limit(self, *, subject: str, scope: str) -> None: ...
+
     async def issue(self, *, email: str, purpose: str) -> str: ...
 
     async def consume(self, *, email: str, purpose: str, code: str) -> None: ...
@@ -51,6 +68,9 @@ class VerificationCodeStore(Protocol):
 
 
 class UnavailableVerificationCodeStore:
+    async def limit(self, *, subject: str, scope: str) -> None:
+        raise AppError(status_code=503, code="verification_unavailable", message="验证码服务不可用")
+
     async def issue(self, *, email: str, purpose: str) -> str:
         raise AppError(status_code=503, code="verification_unavailable", message="验证码服务不可用")
 
@@ -71,6 +91,29 @@ class RedisVerificationCodeStore:
 
     def _digest(self, identifier: str, code: str) -> str:
         return hmac_new(self._secret, f"{identifier}:{code}".encode(), sha256).hexdigest()
+
+    async def limit(self, *, subject: str, scope: str) -> None:
+        identifier = self._identifier(subject, scope)
+        result = await cast(
+            Awaitable[int],
+            self._redis.eval(
+                LIMIT_SCRIPT,
+                2,
+                f"verification:limit:cooldown:{identifier}",
+                f"verification:limit:hourly:{identifier}",
+                "60",
+                "3600",
+                "5",
+            ),
+        )
+        if result == -1:
+            raise AppError(
+                status_code=429, code="verification_too_frequent", message="请求过于频繁"
+            )
+        if result == -2:
+            raise AppError(
+                status_code=429, code="verification_rate_limited", message="请求次数过多"
+            )
 
     async def issue(self, *, email: str, purpose: str) -> str:
         identifier = self._identifier(email, purpose)

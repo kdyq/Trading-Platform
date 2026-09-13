@@ -22,6 +22,7 @@ async def _exercise_transaction_scope(database_url: str) -> None:
     schema = f"test_session_{uuid4().hex}"
     engine = create_database_engine(database_url)
     session_factory = create_session_factory(engine)
+    rollback_events: list[str] = []
     try:
         async with engine.begin() as connection:
             await connection.execute(text(f'CREATE SCHEMA "{schema}"'))
@@ -31,14 +32,22 @@ async def _exercise_transaction_scope(database_url: str) -> None:
             )
 
         async with transaction_scope(session_factory) as session:
+            session.info.setdefault("rollback_callbacks", []).append(
+                lambda: rollback_events.append("committed")
+            )
             await session.execute(text(f'SET search_path TO "{schema}"'))
             await session.execute(text("INSERT INTO transaction_probe VALUES (1)"))
 
         with pytest.raises(RuntimeError, match="rollback probe"):
             async with transaction_scope(session_factory) as session:
+                session.info.setdefault("rollback_callbacks", []).append(
+                    lambda: rollback_events.append("rolled-back")
+                )
                 await session.execute(text(f'SET search_path TO "{schema}"'))
                 await session.execute(text("INSERT INTO transaction_probe VALUES (2)"))
                 raise RuntimeError("rollback probe")
+
+        assert rollback_events == ["rolled-back"]
 
         async with engine.connect() as connection:
             await connection.execute(text(f'SET search_path TO "{schema}"'))

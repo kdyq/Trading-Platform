@@ -21,6 +21,11 @@ const router = createRouter({
         },
         { path: 'account', name: 'account', component: () => import('../views/AccountView.vue') },
         {
+          path: 'campus-verification',
+          name: 'campus-verification',
+          component: () => import('../views/CampusVerificationView.vue'),
+        },
+        {
           path: 'my-products',
           name: 'my-products',
           component: () => import('../views/AccountCollectionView.vue'),
