@@ -51,17 +51,37 @@ async def _exercise_identity_constraints(database_url: str) -> None:
             )
             await connection.execute(
                 text(
-                    "INSERT INTO users (id, login_email, password_hash, display_name) "
-                    "VALUES (:id, :email, 'hash', '测试用户')"
+                    "INSERT INTO users "
+                    "(id, login_email, password_hash, display_name, login_email_verified_at, "
+                    "user_agreement_version, privacy_policy_version, terms_agreed_at) "
+                    "VALUES (:id, :email, 'hash', '测试用户', now(), 'test', 'test', now())"
                 ),
                 {"id": first_user_id, "email": "login@example.com"},
             )
             await connection.execute(
                 text(
-                    "INSERT INTO users (id, login_email, password_hash, display_name) "
-                    "VALUES (:id, :email, 'hash', '另一用户')"
+                    "INSERT INTO users "
+                    "(id, login_email, password_hash, display_name, login_email_verified_at, "
+                    "user_agreement_version, privacy_policy_version, terms_agreed_at) "
+                    "VALUES (:id, :email, 'hash', '另一用户', now(), 'test', 'test', now())"
                 ),
                 {"id": second_user_id, "email": "other@example.com"},
+            )
+
+            await connection.execute(
+                text("UPDATE users SET deleted_at = now() WHERE id = :id"),
+                {"id": first_user_id},
+            )
+            replacement_user_id = uuid4()
+            await connection.execute(
+                text(
+                    "INSERT INTO users "
+                    "(id, login_email, password_hash, display_name, login_email_verified_at, "
+                    "user_agreement_version, privacy_policy_version, terms_agreed_at) "
+                    "VALUES (:id, 'login@example.com', 'hash', '替代用户', "
+                    "now(), 'test', 'test', now())"
+                ),
+                {"id": replacement_user_id},
             )
 
             with pytest.raises(IntegrityError):
@@ -69,8 +89,11 @@ async def _exercise_identity_constraints(database_url: str) -> None:
                     await connection.execute(
                         text(
                             "INSERT INTO users "
-                            "(id, login_email, password_hash, display_name) "
-                            "VALUES (:id, 'Upper@Example.com', 'hash', '非法用户')"
+                            "(id, login_email, password_hash, display_name, "
+                            "login_email_verified_at, user_agreement_version, "
+                            "privacy_policy_version, terms_agreed_at) "
+                            "VALUES (:id, 'Upper@Example.com', 'hash', '非法用户', "
+                            "now(), 'test', 'test', now())"
                         ),
                         {"id": uuid4()},
                     )
@@ -81,7 +104,7 @@ async def _exercise_identity_constraints(database_url: str) -> None:
                     "(id, user_id, campus_id, campus_email, status) "
                     "VALUES (:id, :user_id, :campus_id, 'student@campus.edu', 'verified')"
                 ),
-                {"id": uuid4(), "user_id": first_user_id, "campus_id": campus_id},
+                {"id": uuid4(), "user_id": replacement_user_id, "campus_id": campus_id},
             )
             with pytest.raises(IntegrityError):
                 async with connection.begin_nested():

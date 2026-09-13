@@ -94,7 +94,12 @@ class User(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, VersionMixin, B
     __tablename__ = "users"
     __table_args__ = (
         CheckConstraint("login_email = lower(login_email)", name="login_email_lowercase"),
-        Index("uq_users_login_email", func.lower(text("login_email")), unique=True),
+        Index(
+            "uq_users_login_email",
+            func.lower(text("login_email")),
+            unique=True,
+            postgresql_where=text("deleted_at IS NULL"),
+        ),
         Index("ix_users_status", "status"),
     )
 
@@ -113,6 +118,11 @@ class User(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, VersionMixin, B
         server_default=UserStatus.ACTIVE.value,
     )
     last_login_at: Mapped[datetime | None]
+    login_email_verified_at: Mapped[datetime]
+    user_agreement_version: Mapped[str] = mapped_column(String(64))
+    privacy_policy_version: Mapped[str] = mapped_column(String(64))
+    terms_agreed_at: Mapped[datetime]
+    avatar_key: Mapped[str | None] = mapped_column(String(255))
 
     roles: Mapped[list["Role"]] = relationship(secondary=user_roles, back_populates="users")
     campus_verifications: Mapped[list["CampusVerification"]] = relationship(back_populates="user")
@@ -206,7 +216,10 @@ class UserSession(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     family_id: Mapped[UUID]
     refresh_token_digest: Mapped[str] = mapped_column(String(128))
     expires_at: Mapped[datetime]
+    authenticated_at: Mapped[datetime]
     last_used_at: Mapped[datetime | None]
     revoked_at: Mapped[datetime | None]
+    user_agent: Mapped[str | None] = mapped_column(String(512))
+    ip_address: Mapped[str | None] = mapped_column(String(64))
 
     user: Mapped[User] = relationship(back_populates="sessions")

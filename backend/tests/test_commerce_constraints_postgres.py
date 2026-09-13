@@ -71,9 +71,13 @@ async def _exercise_commerce_constraints(database_url: str) -> None:
             )
             await connection.execute(
                 text(
-                    "INSERT INTO users (id, login_email, password_hash, display_name) VALUES "
-                    "(:buyer, 'buyer@example.com', 'hash', '测试买家'), "
-                    "(:seller, 'seller@example.com', 'hash', '测试卖家')"
+                    "INSERT INTO users "
+                    "(id, login_email, password_hash, display_name, login_email_verified_at, "
+                    "user_agreement_version, privacy_policy_version, terms_agreed_at) VALUES "
+                    "(:buyer, 'buyer@example.com', 'hash', '测试买家', now(), "
+                    "'test', 'test', now()), "
+                    "(:seller, 'seller@example.com', 'hash', '测试卖家', now(), "
+                    "'test', 'test', now())"
                 ),
                 {"buyer": buyer_id, "seller": seller_id},
             )

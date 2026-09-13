@@ -1,0 +1,97 @@
+from functools import lru_cache
+from typing import Annotated, cast
+
+from fastapi import Depends, Request
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.config import Settings
+from app.core.exceptions import AppError
+from app.core.security import PasswordManager, TokenManager
+from app.db.session import get_database_session
+from app.repositories.identity import IdentityRepository, SqlAlchemyIdentityRepository
+from app.services.auth import AuthService
+from app.services.email_verification import (
+    RedisVerificationCodeStore,
+    UnavailableVerificationCodeStore,
+    VerificationCodeStore,
+)
+from app.services.mailer import (
+    QQVerificationMailer,
+    UnavailableVerificationMailer,
+    VerificationMailer,
+)
+
+
+def get_settings_from_request(request: Request) -> Settings:
+    return cast(Settings, request.app.state.settings)
+
+
+def get_identity_repository(
+    session: Annotated[AsyncSession, Depends(get_database_session)],
+) -> IdentityRepository:
+    return SqlAlchemyIdentityRepository(session)
+
+
+@lru_cache
+def get_password_manager() -> PasswordManager:
+    return PasswordManager()
+
+
+def get_token_manager(
+    settings: Annotated[Settings, Depends(get_settings_from_request)],
+) -> TokenManager:
+    if settings.auth_secret_key is None:
+        raise AppError(
+            status_code=503, code="authentication_unavailable", message="账户服务尚未配置"
+        )
+    try:
+        return TokenManager(
+            settings.auth_secret_key.get_secret_value(),
+            access_minutes=settings.access_token_minutes,
+            refresh_days=settings.refresh_token_days,
+        )
+    except ValueError as exc:
+        raise AppError(
+            status_code=503, code="authentication_unavailable", message="账户服务配置无效"
+        ) from exc
+
+
+def get_verification_store(
+    request: Request,
+    settings: Annotated[Settings, Depends(get_settings_from_request)],
+) -> VerificationCodeStore:
+    if request.app.state.redis is None or settings.auth_verification_secret is None:
+        return UnavailableVerificationCodeStore()
+    return RedisVerificationCodeStore(
+        request.app.state.redis, settings.auth_verification_secret.get_secret_value()
+    )
+
+
+def get_verification_mailer(
+    settings: Annotated[Settings, Depends(get_settings_from_request)],
+) -> VerificationMailer:
+    if settings.qq_smtp_username is None or settings.qq_smtp_auth_code is None:
+        return UnavailableVerificationMailer()
+    return QQVerificationMailer(
+        username=settings.qq_smtp_username,
+        auth_code=settings.qq_smtp_auth_code.get_secret_value(),
+        from_name=settings.qq_smtp_from_name,
+    )
+
+
+def get_auth_service(
+    repository: Annotated[IdentityRepository, Depends(get_identity_repository)],
+    verification_store: Annotated[VerificationCodeStore, Depends(get_verification_store)],
+    mailer: Annotated[VerificationMailer, Depends(get_verification_mailer)],
+    password_manager: Annotated[PasswordManager, Depends(get_password_manager)],
+    token_manager: Annotated[TokenManager, Depends(get_token_manager)],
+    settings: Annotated[Settings, Depends(get_settings_from_request)],
+) -> AuthService:
+    return AuthService(
+        repository=repository,
+        verification_store=verification_store,
+        mailer=mailer,
+        password_manager=password_manager,
+        token_manager=token_manager,
+        settings=settings,
+    )

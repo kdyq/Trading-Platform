@@ -4,23 +4,53 @@ export class ApiError extends Error {
   constructor(
     message: string,
     readonly status: number | null,
+    readonly code: string | null = null,
   ) {
     super(message)
     this.name = 'ApiError'
   }
 }
 
-export async function getJson<T>(path: string, acceptedStatuses: number[] = [200]): Promise<T> {
+interface ApiErrorPayload {
+  code?: string
+  message?: string
+}
+
+interface RequestOptions {
+  method?: string
+  body?: unknown
+  accessToken?: string | null
+  acceptedStatuses?: number[]
+}
+
+export async function requestJson<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const controller = new AbortController()
   const timeout = window.setTimeout(() => controller.abort(), 5000)
 
   try {
     const response = await fetch(`${API_BASE_URL}${path}`, {
-      headers: { Accept: 'application/json' },
+      method: options.method ?? 'GET',
+      credentials: 'include',
+      headers: {
+        Accept: 'application/json',
+        ...(options.body === undefined ? {} : { 'Content-Type': 'application/json' }),
+        ...(options.accessToken ? { Authorization: `Bearer ${options.accessToken}` } : {}),
+      },
+      body: options.body === undefined ? undefined : JSON.stringify(options.body),
       signal: controller.signal,
     })
-    if (!acceptedStatuses.includes(response.status)) {
-      throw new ApiError('服务返回了无法处理的响应', response.status)
+    if (!(options.acceptedStatuses ?? [200]).includes(response.status)) {
+      let payload: ApiErrorPayload = {}
+      try {
+        payload = (await response.json()) as ApiErrorPayload
+      } catch {
+        // Non-JSON failures use the stable fallback below.
+      }
+      throw new ApiError(
+        payload.message ?? '服务返回了无法处理的响应',
+        response.status,
+        payload.code ?? null,
+      )
     }
     return (await response.json()) as T
   } catch (error) {
@@ -31,4 +61,8 @@ export async function getJson<T>(path: string, acceptedStatuses: number[] = [200
   } finally {
     window.clearTimeout(timeout)
   }
+}
+
+export async function getJson<T>(path: string, acceptedStatuses: number[] = [200]): Promise<T> {
+  return requestJson<T>(path, { acceptedStatuses })
 }

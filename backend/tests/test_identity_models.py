@@ -38,6 +38,15 @@ def test_active_campus_email_has_a_partial_unique_index() -> None:
     assert "verified" in str(index.dialect_options["postgresql"]["where"])
 
 
+def test_login_email_uniqueness_ignores_soft_deleted_accounts() -> None:
+    table = Base.metadata.tables["users"]
+    index = next(item for item in table.indexes if item.name == "uq_users_login_email")
+
+    assert isinstance(index, Index)
+    assert index.unique is True
+    assert "deleted_at IS NULL" in str(index.dialect_options["postgresql"]["where"])
+
+
 def test_required_verification_states_exist() -> None:
     assert {status.value for status in CampusVerificationStatus} == {
         "unapplied",

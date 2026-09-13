@@ -58,9 +58,24 @@ async def _exercise_migration(database_url: str) -> None:
             school_id,
         )
         await connection.execute(
-            "INSERT INTO users (id, login_email, password_hash, display_name) "
-            "VALUES ($1, 'seller@example.com', 'hash', '测试卖家')",
+            "INSERT INTO users "
+            "(id, login_email, password_hash, display_name, login_email_verified_at, "
+            "user_agreement_version, privacy_policy_version, terms_agreed_at) "
+            "VALUES ($1, 'seller@example.com', 'hash', '测试卖家', now(), 'test', 'test', now())",
             seller_id,
+        )
+        await connection.execute(
+            "UPDATE users SET deleted_at = now() WHERE id = $1",
+            seller_id,
+        )
+        replacement_seller_id = uuid4()
+        await connection.execute(
+            "INSERT INTO users "
+            "(id, login_email, password_hash, display_name, login_email_verified_at, "
+            "user_agreement_version, privacy_policy_version, terms_agreed_at) "
+            "VALUES ($1, 'seller@example.com', 'hash', '替代卖家', "
+            "now(), 'test', 'test', now())",
+            replacement_seller_id,
         )
         await connection.execute(
             "INSERT INTO categories (id, code, name) VALUES ($1, 'test', '测试分类')",
@@ -71,7 +86,7 @@ async def _exercise_migration(database_url: str) -> None:
             "(id, seller_id, campus_id, category_id, title, description, price) "
             "VALUES ($1, $2, $3, $4, '测试商品', '迁移测试', 1.00)",
             product_id,
-            seller_id,
+            replacement_seller_id,
             campus_id,
             category_id,
         )
@@ -86,6 +101,12 @@ async def _exercise_migration(database_url: str) -> None:
         )
 
         _run_alembic(database_url, schema, "downgrade", "f0342e63c26a")
+        assert (
+            await connection.fetchval(
+                "SELECT count(*) FROM users WHERE login_email = 'seller@example.com'"
+            )
+            == 2
+        )
         rows = await connection.fetch(
             "SELECT object_key, display_order FROM product_images ORDER BY object_key"
         )

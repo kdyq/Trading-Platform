@@ -15,6 +15,7 @@ POSTGRES_TESTS = (
     "tests/test_identity_constraints_postgres.py",
     "tests/test_commerce_constraints_postgres.py",
     "tests/test_session_transactions_postgres.py",
+    "tests/test_auth_rotation_postgres.py",
     "tests/test_product_image_migration_postgres.py",
 )
 

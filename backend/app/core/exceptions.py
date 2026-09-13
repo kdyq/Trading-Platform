@@ -7,6 +7,14 @@ from fastapi.responses import JSONResponse
 from app.core.logging import request_id_var
 
 
+class AppError(Exception):
+    def __init__(self, *, status_code: int, code: str, message: str) -> None:
+        super().__init__(message)
+        self.status_code = status_code
+        self.code = code
+        self.message = message
+
+
 def error_payload(
     *, code: str, message: str, details: Any = None, request_id: str | None = None
 ) -> dict[str, Any]:
@@ -50,7 +58,15 @@ async def unhandled_exception_handler(_request: Request, _exc: Exception) -> JSO
     )
 
 
+async def app_exception_handler(_request: Request, exc: AppError) -> JSONResponse:
+    return JSONResponse(
+        status_code=exc.status_code,
+        content=error_payload(code=exc.code, message=exc.message),
+    )
+
+
 def register_exception_handlers(app: FastAPI) -> None:
+    app.add_exception_handler(AppError, app_exception_handler)  # type: ignore[arg-type]
     app.add_exception_handler(HTTPException, http_exception_handler)  # type: ignore[arg-type]
     app.add_exception_handler(RequestValidationError, validation_exception_handler)  # type: ignore[arg-type]
     app.add_exception_handler(Exception, unhandled_exception_handler)
