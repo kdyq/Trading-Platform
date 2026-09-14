@@ -14,6 +14,7 @@ from app.repositories.identity import (
     IdentityRepository,
     SqlAlchemyIdentityRepository,
 )
+from app.repositories.market import MarketRepository, SqlAlchemyMarketRepository
 from app.services.account import AccountService
 from app.services.auth import AuthService
 from app.services.campus import CampusService
@@ -31,6 +32,7 @@ from app.services.mailer import (
     UnavailableVerificationMailer,
     VerificationMailer,
 )
+from app.services.market import MarketService
 from app.services.private_storage import PrivateAppealStorage
 
 
@@ -54,6 +56,12 @@ def get_campus_repository(
     session: Annotated[AsyncSession, Depends(get_database_session)],
 ) -> CampusRepository:
     return SqlAlchemyCampusRepository(session)
+
+
+def get_market_repository(
+    session: Annotated[AsyncSession, Depends(get_database_session)],
+) -> MarketRepository:
+    return SqlAlchemyMarketRepository(session)
 
 
 @lru_cache
@@ -179,3 +187,9 @@ def get_campus_service(
         ),
         settings=settings,
     )
+
+
+def get_market_service(
+    repository: Annotated[MarketRepository, Depends(get_market_repository)],
+) -> MarketService:
+    return MarketService(repository)

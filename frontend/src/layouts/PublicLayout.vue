@@ -18,7 +18,7 @@ async function logout() {
       <nav class="container navigation" aria-label="主导航">
         <RouterLink class="wordmark" to="/"> 拾光集市 </RouterLink>
         <div class="navigation-actions">
-          <RouterLink class="navigation-link" to="/"> 逛好物 </RouterLink>
+          <RouterLink class="navigation-link" to="/market"> 逛好物 </RouterLink>
           <template v-if="auth.user">
             <RouterLink class="navigation-link" to="/account">
               {{ auth.user.display_name }}
