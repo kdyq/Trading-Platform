@@ -8,6 +8,11 @@ const router = createRouter({
       component: () => import('../layouts/PublicLayout.vue'),
       children: [
         { path: '', name: 'home', component: () => import('../views/HomeView.vue') },
+        {
+          path: 'design-system',
+          name: 'design-system',
+          component: () => import('../views/ComponentDemoView.vue'),
+        },
         { path: 'login', name: 'login', component: () => import('../views/LoginView.vue') },
         {
           path: 'forgot-password',

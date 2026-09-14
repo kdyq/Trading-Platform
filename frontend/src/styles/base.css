@@ -35,7 +35,7 @@ a {
 }
 
 :focus-visible {
-  outline: 3px solid var(--leaf);
+  outline: 3px solid var(--focus);
   outline-offset: 3px;
 }
 
@@ -123,12 +123,407 @@ a {
 .button-primary {
   background: var(--primary);
   box-shadow: 0 8px 18px rgb(232 83 31 / 22%);
-  color: #ffffff;
+  color: var(--ink);
 }
 
 .button-primary:hover {
-  background: var(--primary-deep);
+  background: var(--primary);
   box-shadow: 0 12px 24px rgb(232 83 31 / 28%);
+}
+
+.ui-button {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: var(--radius-pill);
+  padding: 0 20px;
+  cursor: pointer;
+  font-weight: 800;
+  line-height: 1;
+  white-space: nowrap;
+  transition:
+    transform 180ms ease,
+    box-shadow 180ms ease,
+    border-color 180ms ease;
+}
+
+.ui-button:hover:not(:disabled) {
+  transform: translateY(-2px);
+}
+
+.ui-button:active:not(:disabled) {
+  transform: translateY(1px) scale(0.98);
+}
+
+.ui-button-primary {
+  background: var(--primary);
+  box-shadow: 0 8px 18px rgb(232 83 31 / 22%);
+  color: var(--ink);
+}
+
+.ui-button-secondary {
+  border-color: #b9a58f;
+  background: var(--card);
+  color: var(--ink);
+}
+
+.ui-button-secondary:hover:not(:disabled) {
+  border-color: var(--primary-deep);
+}
+
+.ui-button-danger {
+  background: var(--danger);
+  color: #ffffff;
+}
+
+.ui-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+
+.ui-field {
+  display: grid;
+  gap: var(--space-2);
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.ui-field input,
+.ui-field select,
+.ui-field textarea {
+  width: 100%;
+  min-height: 46px;
+  border: 1px solid #9d8872;
+  border-radius: var(--radius-input);
+  padding: 10px 13px;
+  background: var(--card);
+  color: var(--ink);
+}
+
+.ui-field input:focus,
+.ui-field select:focus,
+.ui-field textarea:focus {
+  border-color: var(--focus);
+  box-shadow: 0 0 0 3px rgb(46 125 91 / 16%);
+  outline: 0;
+}
+
+.ui-field small {
+  color: var(--ink-2);
+  font-weight: 500;
+  line-height: 1.5;
+}
+
+.ui-field[data-invalid='true'] input,
+.ui-field[data-invalid='true'] select,
+.ui-field[data-invalid='true'] textarea {
+  border-color: var(--danger);
+}
+
+.ui-field .ui-field-error {
+  color: var(--danger);
+  font-weight: 700;
+}
+
+.ui-chip {
+  display: inline-flex;
+  min-height: 30px;
+  align-items: center;
+  border: 1px solid #b9a58f;
+  border-radius: var(--radius-pill);
+  padding: 4px 11px;
+  background: var(--card);
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.ui-chip-button {
+  min-height: 40px;
+  cursor: pointer;
+}
+
+.ui-chip-button:hover {
+  border-color: var(--primary-deep);
+  color: #a43512;
+}
+
+.ui-chip.is-selected {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: #ffffff;
+}
+
+.ui-chip-trust {
+  border-color: #77a990;
+  background: var(--leaf-soft);
+  color: #205c43;
+}
+
+.ui-chip-warning {
+  border-color: #c38a13;
+  background: var(--lemon);
+  color: #694500;
+}
+
+.product-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-5);
+}
+
+.product-card {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  background: var(--card);
+  box-shadow: var(--shadow);
+  transition:
+    transform 180ms ease,
+    box-shadow 180ms ease;
+}
+
+.product-card:hover {
+  box-shadow: var(--shadow-hover);
+  transform: translateY(-4px);
+}
+
+.product-card[data-state='sold'],
+.product-card[data-state='pending'] {
+  box-shadow: none;
+}
+
+.product-card-link {
+  display: block;
+  color: inherit;
+  text-decoration: none;
+}
+
+.product-card-media {
+  position: relative;
+  display: grid;
+  overflow: hidden;
+  aspect-ratio: 4 / 3;
+  place-items: center;
+  background: var(--peach);
+}
+
+.product-card-media img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.product-image-fallback {
+  color: var(--ink-2);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.product-state-label,
+.product-favorite-label {
+  position: absolute;
+  top: 12px;
+  border-radius: var(--radius-pill);
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.product-state-label {
+  left: 12px;
+  background: var(--ink);
+  color: #ffffff;
+}
+
+.product-favorite-label {
+  right: 12px;
+  background: var(--card);
+  color: var(--danger);
+}
+
+.product-card-body {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
+}
+
+.product-card-heading {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.product-card-heading h3 {
+  margin: 0;
+  font-size: 16px;
+  line-height: 1.45;
+}
+
+.product-price {
+  color: #bd3b13;
+  font-size: 24px;
+}
+
+.product-card-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.product-card-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin: 0;
+  color: var(--ink-2);
+  font-size: 12px;
+}
+
+.ui-skeleton {
+  display: block;
+  max-width: 100%;
+  border-radius: var(--radius-input);
+  background: #ead9c4;
+}
+
+.ui-skeleton-rounded {
+  border-radius: var(--radius-card);
+}
+
+.skeleton-line {
+  height: 14px;
+}
+
+.skeleton-line-short {
+  width: 42%;
+}
+
+.skeleton-line-medium {
+  width: 68%;
+}
+
+.dialog-open {
+  overflow: hidden;
+}
+
+.dialog-backdrop {
+  position: fixed;
+  z-index: var(--layer-dialog);
+  inset: 0;
+  display: grid;
+  align-items: end;
+  justify-items: center;
+  padding: var(--space-4);
+  background: rgb(43 33 24 / 54%);
+}
+
+.dialog-panel {
+  width: min(100%, 560px);
+  max-height: min(86dvh, 720px);
+  overflow: auto;
+  border-radius: var(--radius-card);
+  padding: clamp(24px, 5vw, 40px);
+  background: var(--card);
+  box-shadow: 0 24px 70px rgb(43 33 24 / 28%);
+}
+
+.dialog-heading {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: var(--space-5);
+  margin-bottom: var(--space-5);
+}
+
+.dialog-heading h2 {
+  margin-bottom: 0;
+}
+
+.dialog-close {
+  min-height: 44px;
+  border: 1px solid #b9a58f;
+  border-radius: var(--radius-pill);
+  padding: 0 14px;
+  background: var(--card);
+  color: var(--ink);
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.ui-toast {
+  position: fixed;
+  z-index: var(--layer-toast);
+  right: 20px;
+  bottom: 20px;
+  max-width: min(360px, calc(100vw - 40px));
+  border-radius: var(--radius-input);
+  padding: 13px 16px;
+  box-shadow: var(--shadow-hover);
+  font-weight: 800;
+}
+
+.ui-toast-success {
+  border: 1px solid #77a990;
+  background: var(--leaf-soft);
+  color: #205c43;
+}
+
+.ui-toast-error {
+  border: 1px solid var(--danger);
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.component-demo {
+  padding-block: 64px 96px;
+}
+
+.section-heading {
+  max-width: 720px;
+  margin-bottom: var(--space-12);
+}
+
+.section-heading > p:last-child {
+  color: var(--ink-2);
+  line-height: 1.7;
+}
+
+.demo-section + .demo-section {
+  margin-top: 64px;
+}
+
+.demo-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.demo-field-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-5);
+  margin-bottom: var(--space-5);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .ui-skeleton {
+    background: linear-gradient(90deg, #ead9c4 20%, #f7ead9 42%, #ead9c4 64%);
+    background-size: 240% 100%;
+    animation: skeleton-shimmer 1.5s ease-in-out infinite;
+  }
+}
+
+@keyframes skeleton-shimmer {
+  to {
+    background-position: -240% 0;
+  }
 }
 
 .button-ghost {
@@ -809,6 +1204,37 @@ h2 {
     align-items: flex-start;
     flex-direction: column;
     justify-content: center;
+  }
+
+  .product-grid,
+  .demo-field-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .dialog-backdrop {
+    padding: 0;
+  }
+
+  .dialog-panel {
+    width: 100%;
+    max-height: 90dvh;
+    border-radius: var(--radius-card) var(--radius-card) 0 0;
+  }
+}
+
+@media (min-width: 769px) and (max-width: 1100px) {
+  .product-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .dialog-backdrop {
+    align-items: center;
+  }
+}
+
+@media (min-width: 1101px) {
+  .dialog-backdrop {
+    align-items: center;
   }
 }
 
