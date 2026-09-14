@@ -11,6 +11,12 @@ class PublicCategoryResponse(BaseModel):
     name: str
 
 
+class PublicCampusResponse(BaseModel):
+    id: UUID
+    name: str
+    school_name: str
+
+
 class PublicProductSummary(BaseModel):
     id: UUID
     title: str
@@ -23,6 +29,9 @@ class PublicProductSummary(BaseModel):
     seller_verified: bool
     category_code: str
     category_name: str
+    condition: str
+    is_negotiable: bool
+    view_count: int = Field(ge=0)
     image_url: str | None = None
     image_alt: str | None = None
 

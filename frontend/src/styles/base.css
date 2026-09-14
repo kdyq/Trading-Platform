@@ -294,6 +294,7 @@ a {
 }
 
 .product-card[data-state='sold'],
+.product-card[data-state='reserved'],
 .product-card[data-state='pending'] {
   box-shadow: none;
 }
@@ -834,6 +835,109 @@ a {
   max-width: 34ch;
   color: var(--ink-2);
   line-height: 1.7;
+}
+
+.market-page {
+  min-height: calc(100dvh - 148px);
+  padding-block: 64px 96px;
+}
+
+.market-page-heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 36px;
+}
+
+.market-page-heading h1,
+.market-page-heading p {
+  margin-bottom: 10px;
+}
+
+.market-page-heading > div > p:last-child {
+  color: var(--ink-2);
+}
+
+.mobile-filter-button {
+  display: none;
+}
+
+.market-search-bar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(180px, 240px);
+  gap: 16px;
+  margin-bottom: 24px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  padding: 20px;
+  background: var(--card);
+}
+
+.market-results-layout {
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr);
+  align-items: start;
+  gap: 24px;
+}
+
+.desktop-filters {
+  position: sticky;
+  top: 92px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  padding: 20px;
+  background: var(--card);
+}
+
+.filter-form {
+  display: grid;
+  gap: 18px;
+}
+
+.price-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.filter-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.market-result-list {
+  min-width: 0;
+}
+
+.result-count {
+  margin: 0 0 16px;
+  color: var(--ink-2);
+}
+
+.result-count strong {
+  color: var(--primary-deep);
+}
+
+.market-product-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  margin-top: 36px;
+}
+
+.pagination span {
+  color: var(--ink-2);
+  font-size: 14px;
+  font-weight: 800;
 }
 
 @media (prefers-reduced-motion: no-preference) {
@@ -1627,6 +1731,49 @@ h2 {
     width: calc(100vw - 48px);
     height: 420px;
     scroll-snap-align: center;
+  }
+
+  .market-page {
+    padding-block: 44px 72px;
+  }
+
+  .market-page-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .mobile-filter-button {
+    display: inline-flex;
+    width: 100%;
+  }
+
+  .market-search-bar {
+    grid-template-columns: 1fr;
+    padding: 16px;
+  }
+
+  .market-results-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .desktop-filters {
+    display: none;
+  }
+
+  .market-product-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .pagination {
+    align-items: stretch;
+    flex-direction: column;
+    text-align: center;
+  }
+}
+
+@media (min-width: 769px) and (max-width: 1100px) {
+  .market-product-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 

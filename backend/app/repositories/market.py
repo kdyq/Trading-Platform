@@ -8,7 +8,7 @@ from uuid import UUID
 from sqlalchemy import ColumnElement, Select, exists, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.catalog import Category, Product, ProductStatus
+from app.models.catalog import Category, Product, ProductCondition, ProductStatus
 from app.models.identity import Campus, CampusVerification, CampusVerificationStatus, School, User
 
 
@@ -26,6 +26,22 @@ class PublicProductRecord:
     seller_verified: bool
     category_code: str
     category_name: str
+    condition: str
+    is_negotiable: bool
+    view_count: int
+
+
+@dataclass(frozen=True)
+class PublicProductFilters:
+    keyword: str | None = None
+    category: str | None = None
+    campus_id: UUID | None = None
+    min_price: Decimal | None = None
+    max_price: Decimal | None = None
+    condition: ProductCondition | None = None
+    negotiable: bool | None = None
+    status: ProductStatus | None = None
+    sort: str = "newest"
 
 
 @dataclass(frozen=True)
@@ -40,6 +56,12 @@ class MarketRepository(Protocol):
 
     async def list_latest_products(self, *, limit: int) -> Sequence[PublicProductRecord]: ...
 
+    async def list_campuses(self) -> Sequence[tuple[UUID, str, str]]: ...
+
+    async def search_products(
+        self, *, filters: PublicProductFilters, offset: int, limit: int
+    ) -> tuple[Sequence[PublicProductRecord], int]: ...
+
     async def count_latest_products(self) -> int: ...
 
     async def get_summary(self) -> PublicMarketCounts: ...
@@ -47,6 +69,7 @@ class MarketRepository(Protocol):
 
 class SqlAlchemyMarketRepository:
     PUBLIC_STATUSES = (ProductStatus.ON_SALE, ProductStatus.RESERVED)
+    ALL_PUBLIC_STATUSES = (*PUBLIC_STATUSES, ProductStatus.SOLD)
 
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
@@ -54,15 +77,19 @@ class SqlAlchemyMarketRepository:
     def _verified_seller(self) -> ColumnElement[bool]:
         now = datetime.now(UTC)
         return select(
-            exists().where(
+            exists()
+            .where(
                 CampusVerification.user_id == Product.seller_id,
                 CampusVerification.deleted_at.is_(None),
                 CampusVerification.status == CampusVerificationStatus.VERIFIED,
                 CampusVerification.expires_at > now,
             )
+            .correlate(Product)
         ).scalar_subquery()
 
-    def _public_product_query(self) -> Select[tuple[object, ...]]:
+    def _public_product_query(
+        self, statuses: tuple[ProductStatus, ...] | None = None
+    ) -> Select[tuple[object, ...]]:
         return (
             select(
                 Product.id,
@@ -77,6 +104,9 @@ class SqlAlchemyMarketRepository:
                 self._verified_seller().label("seller_verified"),
                 Category.code.label("category_code"),
                 Category.name.label("category_name"),
+                Product.condition,
+                Product.is_negotiable,
+                Product.view_count,
             )
             .join(Campus, Campus.id == Product.campus_id)
             .join(School, School.id == Campus.school_id)
@@ -84,7 +114,7 @@ class SqlAlchemyMarketRepository:
             .join(Category, Category.id == Product.category_id)
             .where(
                 Product.deleted_at.is_(None),
-                Product.status.in_(self.PUBLIC_STATUSES),
+                Product.status.in_(statuses or self.PUBLIC_STATUSES),
                 Campus.deleted_at.is_(None),
                 School.deleted_at.is_(None),
                 User.deleted_at.is_(None),
@@ -100,6 +130,20 @@ class SqlAlchemyMarketRepository:
             .order_by(Category.display_order, Category.name)
         )
         return result.all()
+
+    async def list_campuses(self) -> Sequence[tuple[UUID, str, str]]:
+        result = await self.session.execute(
+            select(Campus.id, Campus.name, School.name)
+            .join(School, School.id == Campus.school_id)
+            .where(
+                Campus.deleted_at.is_(None),
+                School.deleted_at.is_(None),
+                Campus.is_active.is_(True),
+                School.is_active.is_(True),
+            )
+            .order_by(School.name, Campus.name)
+        )
+        return [(row[0], row[1], row[2]) for row in result]
 
     async def list_latest_products(self, *, limit: int) -> Sequence[PublicProductRecord]:
         result = await self.session.execute(
@@ -120,6 +164,44 @@ class SqlAlchemyMarketRepository:
             )
             or 0
         )
+
+    async def search_products(
+        self, *, filters: PublicProductFilters, offset: int, limit: int
+    ) -> tuple[Sequence[PublicProductRecord], int]:
+        query = self._public_product_query(self.ALL_PUBLIC_STATUSES)
+        if filters.status is None:
+            query = query.where(Product.status.in_(self.PUBLIC_STATUSES))
+        else:
+            query = query.where(Product.status == filters.status)
+        if filters.keyword:
+            query = query.where(Product.title.contains(filters.keyword, autoescape=True))
+        if filters.category:
+            query = query.where(Category.code == filters.category)
+        if filters.campus_id:
+            query = query.where(Product.campus_id == filters.campus_id)
+        if filters.min_price is not None:
+            query = query.where(Product.price >= filters.min_price)
+        if filters.max_price is not None:
+            query = query.where(Product.price <= filters.max_price)
+        if filters.condition:
+            query = query.where(Product.condition == filters.condition)
+        if filters.negotiable is not None:
+            query = query.where(Product.is_negotiable.is_(filters.negotiable))
+
+        count = int(
+            await self.session.scalar(select(func.count()).select_from(query.subquery())) or 0
+        )
+        ordering = {
+            "price_asc": (Product.price.asc(), Product.id),
+            "price_desc": (Product.price.desc(), Product.id),
+            "newest": (
+                Product.published_at.desc().nulls_last(),
+                Product.created_at.desc(),
+                Product.id,
+            ),
+        }[filters.sort]
+        result = await self.session.execute(query.order_by(*ordering).offset(offset).limit(limit))
+        return [PublicProductRecord(**dict(row._mapping)) for row in result], count
 
     async def get_summary(self) -> PublicMarketCounts:
         base = self._public_product_query().subquery()

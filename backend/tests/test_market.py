@@ -8,7 +8,11 @@ from fastapi.testclient import TestClient
 from app.api.dependencies import get_market_service
 from app.core.config import Settings
 from app.main import create_app
-from app.repositories.market import PublicMarketCounts, PublicProductRecord
+from app.repositories.market import (
+    PublicMarketCounts,
+    PublicProductRecord,
+    SqlAlchemyMarketRepository,
+)
 from app.services.market import MarketService
 
 
@@ -37,8 +41,20 @@ class FakeMarketRepository:
                 seller_verified=True,
                 category_code="books",
                 category_name="教材书籍",
+                condition="good",
+                is_negotiable=True,
+                view_count=3,
             )
         ]
+
+    async def list_campuses(self):  # type: ignore[no-untyped-def]
+        return [(uuid4(), "东校区", "测试学校")]
+
+    async def search_products(self, *, filters, offset, limit):  # type: ignore[no-untyped-def]
+        assert offset == 0
+        assert limit == 12
+        records = await self.list_latest_products(limit=4)
+        return records, 1
 
     async def count_latest_products(self) -> int:
         return 1
@@ -80,3 +96,40 @@ def test_public_market_product_limit_is_bounded() -> None:
         response = client.get("/api/v1/market/products?limit=25")
     assert response.status_code == 422
     assert response.json()["code"] == "validation_error"
+
+
+def test_public_market_search_accepts_url_filters() -> None:
+    app = create_app(Settings(database_url=None, redis_url=None))
+    app.dependency_overrides[get_market_service] = lambda: MarketService(FakeMarketRepository())
+    with TestClient(app) as client:
+        response = client.get(
+            "/api/v1/market/products?keyword=%E6%95%99%E6%9D%90&category=books"
+            "&condition=good&negotiable=true&status=on_sale&sort=price_asc&page=1"
+        )
+    assert response.status_code == 200
+    assert response.json()["items"][0]["condition"] == "good"
+    assert response.json()["items"][0]["is_negotiable"] is True
+
+
+def test_public_market_search_rejects_inverted_price_range() -> None:
+    app = create_app(Settings(database_url=None, redis_url=None))
+    app.dependency_overrides[get_market_service] = lambda: MarketService(FakeMarketRepository())
+    with TestClient(app) as client:
+        response = client.get("/api/v1/market/products?min_price=20&max_price=10")
+    assert response.status_code == 422
+    assert response.json()["code"] == "invalid_price_range"
+
+
+def test_public_market_search_accepts_reserved_status() -> None:
+    app = create_app(Settings(database_url=None, redis_url=None))
+    app.dependency_overrides[get_market_service] = lambda: MarketService(FakeMarketRepository())
+    with TestClient(app) as client:
+        response = client.get("/api/v1/market/products?status=reserved")
+    assert response.status_code == 200
+
+
+def test_verified_seller_query_is_correlated_to_current_product() -> None:
+    repository = object.__new__(SqlAlchemyMarketRepository)
+    query = repository._public_product_query(SqlAlchemyMarketRepository.PUBLIC_STATUSES)
+    sql = str(query)
+    assert "FROM campus_verifications, products" not in sql

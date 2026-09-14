@@ -32,6 +32,13 @@ class ProductStatus(StrEnum):
     DELETED = "deleted"
 
 
+class ProductCondition(StrEnum):
+    NEW = "new"
+    LIKE_NEW = "like_new"
+    GOOD = "good"
+    FAIR = "fair"
+
+
 class Category(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, VersionMixin, Base):
     __tablename__ = "categories"
     __table_args__ = (
@@ -70,6 +77,19 @@ class Product(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, VersionMixin
     title: Mapped[str] = mapped_column(String(120))
     description: Mapped[str] = mapped_column(Text)
     price: Mapped[Decimal] = mapped_column(Numeric(12, 2))
+    condition: Mapped[ProductCondition] = mapped_column(
+        Enum(
+            ProductCondition,
+            values_callable=lambda members: [member.value for member in members],
+            native_enum=False,
+            create_constraint=True,
+            name="product_condition",
+        ),
+        default=ProductCondition.GOOD,
+        server_default=ProductCondition.GOOD.value,
+    )
+    is_negotiable: Mapped[bool] = mapped_column(default=False, server_default=text("false"))
+    view_count: Mapped[int] = mapped_column(default=0, server_default=text("0"))
     status: Mapped[ProductStatus] = mapped_column(
         Enum(
             ProductStatus,

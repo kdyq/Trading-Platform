@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import UiChip from '../ui/UiChip.vue'
 
-export type ProductCardState = 'available' | 'sold' | 'pending' | 'loading'
+export type ProductCardState = 'available' | 'reserved' | 'sold' | 'pending' | 'loading'
 
 withDefaults(
   defineProps<{
@@ -55,6 +55,7 @@ withDefaults(
         />
         <span v-else class="product-image-fallback">暂无商品图片</span>
         <span v-if="state === 'sold'" class="product-state-label">已售出</span>
+        <span v-else-if="state === 'reserved'" class="product-state-label">已预订</span>
         <span v-else-if="state === 'pending'" class="product-state-label">待审核</span>
         <span v-if="favorite" class="product-favorite-label">已收藏</span>
       </div>

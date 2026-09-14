@@ -21,11 +21,14 @@ interface RequestOptions {
   body?: unknown
   accessToken?: string | null
   acceptedStatuses?: number[]
+  signal?: AbortSignal
 }
 
 export async function requestJson<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const controller = new AbortController()
   const timeout = window.setTimeout(() => controller.abort(), 5000)
+  const abortFromCaller = () => controller.abort()
+  options.signal?.addEventListener('abort', abortFromCaller, { once: true })
 
   try {
     const response = await fetch(`${API_BASE_URL}${path}`, {
@@ -67,6 +70,7 @@ export async function requestJson<T>(path: string, options: RequestOptions = {})
     throw new ApiError(message, null)
   } finally {
     window.clearTimeout(timeout)
+    options.signal?.removeEventListener('abort', abortFromCaller)
   }
 }
 
