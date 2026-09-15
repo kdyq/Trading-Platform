@@ -3,8 +3,10 @@ from typing import Annotated, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
+from fastapi.responses import FileResponse
 
-from app.api.dependencies import get_market_service
+from app.api.dependencies import get_market_service, get_settings_from_request
+from app.core.config import Settings
 from app.core.exceptions import AppError
 from app.models.catalog import ProductCondition, ProductStatus
 from app.repositories.market import PublicProductFilters
@@ -12,9 +14,11 @@ from app.schemas.market import (
     PublicCampusResponse,
     PublicCategoryResponse,
     PublicMarketSummaryResponse,
+    PublicProductDetailResponse,
     PublicProductListResponse,
 )
 from app.services.market import MarketService
+from app.services.product_storage import PublicProductStorage
 
 router = APIRouter()
 
@@ -72,6 +76,31 @@ async def products(
         ),
         page=page,
         page_size=page_size,
+    )
+
+
+@router.get("/products/{product_id}", response_model=PublicProductDetailResponse)
+async def product_detail(
+    product_id: UUID,
+    service: Annotated[MarketService, Depends(get_market_service)],
+) -> PublicProductDetailResponse:
+    return await service.product_detail(product_id)
+
+
+@router.get("/product-images/{image_id}", response_class=FileResponse)
+async def product_image(
+    image_id: UUID,
+    service: Annotated[MarketService, Depends(get_market_service)],
+    settings: Annotated[Settings, Depends(get_settings_from_request)],
+) -> FileResponse:
+    image = await service.product_image(image_id)
+    stored = PublicProductStorage(settings.resolved_public_product_storage_root).resolve(
+        image.object_key
+    )
+    return FileResponse(
+        stored.path,
+        media_type=stored.media_type,
+        headers={"Cache-Control": "private, no-store"},
     )
 
 

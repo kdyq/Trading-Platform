@@ -940,6 +940,235 @@ a {
   font-weight: 800;
 }
 
+.product-detail-page {
+  min-height: calc(100dvh - 148px);
+  padding-block: 40px 96px;
+}
+
+.product-breadcrumb {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+  margin-bottom: 24px;
+  color: var(--ink-2);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.product-detail-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(360px, 0.85fr);
+  align-items: start;
+  gap: 28px;
+}
+
+.product-gallery-stage {
+  position: relative;
+  display: grid;
+  overflow: hidden;
+  aspect-ratio: 4 / 3;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  background: var(--peach);
+  place-items: center;
+}
+
+.product-gallery-stage img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.product-gallery-fallback {
+  display: grid;
+  gap: 8px;
+  color: var(--ink-2);
+  text-align: center;
+}
+
+.product-gallery-fallback span {
+  color: var(--ink);
+  font-size: 20px;
+  font-weight: 900;
+}
+
+.gallery-count {
+  position: absolute;
+  right: 14px;
+  bottom: 14px;
+  border-radius: var(--radius-pill);
+  padding: 6px 10px;
+  background: var(--ink);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.gallery-thumbnails {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.gallery-thumbnails button {
+  width: 44px;
+  height: 44px;
+  border: 1px solid #b9a58f;
+  border-radius: var(--radius-input);
+  background: var(--card);
+  cursor: pointer;
+  font-weight: 900;
+}
+
+.gallery-thumbnails button[aria-current='true'] {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: #fff;
+}
+
+.product-purchase-card,
+.product-description-card,
+.seller-trust-card {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  padding: clamp(24px, 4vw, 38px);
+  background: var(--card);
+  box-shadow: var(--shadow);
+}
+
+.product-purchase-card h1 {
+  margin: 18px 0 12px;
+  font-size: clamp(30px, 4vw, 46px);
+}
+
+.product-detail-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.product-detail-price {
+  color: #bd3b13;
+  font-size: clamp(38px, 5vw, 58px);
+}
+
+.product-location,
+.action-disabled-reason {
+  color: var(--ink-2);
+}
+
+.product-main-actions {
+  display: grid;
+  grid-template-columns: 0.7fr 1.3fr;
+  gap: 10px;
+  margin-top: 28px;
+}
+
+.product-facts {
+  display: grid;
+  gap: 12px;
+  margin: 28px 0 0;
+}
+
+.product-facts div {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+
+.product-facts dt {
+  color: var(--ink-2);
+}
+
+.product-facts dd {
+  margin: 0;
+  font-weight: 800;
+  text-align: right;
+}
+
+.product-detail-content {
+  display: grid;
+  grid-template-columns: 1.15fr 0.85fr;
+  gap: 20px;
+  margin-top: 24px;
+}
+
+.product-description {
+  white-space: pre-wrap;
+  color: var(--ink-2);
+  line-height: 1.8;
+}
+
+.report-entry {
+  margin-top: 18px;
+  color: var(--danger);
+}
+
+.seller-trust-card > p {
+  color: var(--ink-2);
+}
+
+.seller-credit-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 24px;
+}
+
+.seller-credit-grid div {
+  display: grid;
+  gap: 5px;
+  border-radius: var(--radius-input);
+  padding: 14px 8px;
+  background: var(--leaf-soft);
+  text-align: center;
+}
+
+.seller-credit-grid strong {
+  font-size: 22px;
+}
+
+.seller-credit-grid span {
+  color: var(--ink-2);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.similar-products {
+  margin-top: 72px;
+}
+
+.product-detail-loading {
+  display: grid;
+  grid-template-columns: 1.15fr 0.85fr;
+  gap: 28px;
+}
+
+.product-detail-image-skeleton {
+  aspect-ratio: 4 / 3;
+}
+
+.product-detail-copy-skeleton {
+  min-height: 460px;
+}
+
+.product-detail-state {
+  min-height: 560px;
+}
+
+.gate-dialog-content {
+  display: grid;
+  gap: 20px;
+}
+
+.gate-dialog-content p {
+  margin: 0;
+  color: var(--ink-2);
+  line-height: 1.7;
+}
+
 @media (prefers-reduced-motion: no-preference) {
   .market-marquee-track {
     animation: market-marquee 24s linear infinite;
@@ -1768,6 +1997,20 @@ h2 {
     align-items: stretch;
     flex-direction: column;
     text-align: center;
+  }
+
+  .product-detail-hero,
+  .product-detail-content,
+  .product-detail-loading {
+    grid-template-columns: 1fr;
+  }
+
+  .product-main-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .product-detail-page {
+    padding-block: 28px 72px;
   }
 }
 

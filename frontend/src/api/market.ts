@@ -51,6 +51,28 @@ export interface PublicProductList {
   page_size: number
 }
 
+export interface PublicSellerTrust {
+  id: string
+  display_name: string
+  campus_verified: boolean
+  review_count: number
+  average_rating: string | null
+  completed_orders: number
+}
+
+export interface PublicProductImage {
+  id: string
+  url: string
+  alt_text: string | null
+}
+
+export interface PublicProductDetail extends PublicProduct {
+  description: string
+  seller: PublicSellerTrust
+  images: PublicProductImage[]
+  similar_products: PublicProduct[]
+}
+
 export interface PublicMarketSummary {
   available_products: number
   active_campuses: number
@@ -75,6 +97,10 @@ export async function searchProducts(params: ProductSearchParams, signal?: Abort
 
 export async function getLatestProducts(limit = 8) {
   return getJson<PublicProductList>(`/api/v1/market/products?limit=${limit}`)
+}
+
+export async function getProductDetail(id: string, signal?: AbortSignal) {
+  return requestJson<PublicProductDetail>(`/api/v1/market/products/${id}`, { signal })
 }
 
 export async function getMarketSummary() {

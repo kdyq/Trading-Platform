@@ -1,5 +1,6 @@
 from datetime import UTC, datetime
 from decimal import Decimal
+from pathlib import Path
 from types import SimpleNamespace
 from uuid import uuid4
 
@@ -10,6 +11,8 @@ from app.core.config import Settings
 from app.main import create_app
 from app.repositories.market import (
     PublicMarketCounts,
+    PublicProductDetailRecord,
+    PublicProductImageRecord,
     PublicProductRecord,
     SqlAlchemyMarketRepository,
 )
@@ -21,6 +24,7 @@ class FakeMarketRepository:
         self.category_id = uuid4()
         self.product_id = uuid4()
         self.seller_id = uuid4()
+        self.image_id = uuid4()
 
     async def list_categories(self):  # type: ignore[no-untyped-def]
         return [SimpleNamespace(id=self.category_id, code="books", name="教材书籍")]
@@ -39,6 +43,7 @@ class FakeMarketRepository:
                 school_name="测试学校",
                 seller_name="小林",
                 seller_verified=True,
+                category_id=self.category_id,
                 category_code="books",
                 category_name="教材书籍",
                 condition="good",
@@ -55,6 +60,45 @@ class FakeMarketRepository:
         assert limit == 12
         records = await self.list_latest_products(limit=4)
         return records, 1
+
+    async def get_product(self, product_id):  # type: ignore[no-untyped-def]
+        if product_id != self.product_id:
+            return None
+        record = (await self.list_latest_products(limit=4))[0]
+        return PublicProductDetailRecord(
+            **record.__dict__,
+            description="少量笔记，无缺页。",
+            seller_review_count=2,
+            seller_average_rating=Decimal("4.50"),
+            seller_completed_orders=3,
+        )
+
+    async def list_similar_products(  # type: ignore[no-untyped-def]
+        self, *, product_id, category_id, limit
+    ):
+        assert product_id == self.product_id
+        assert category_id == self.category_id
+        assert limit == 4
+        return []
+
+    async def list_product_images(self, product_id):  # type: ignore[no-untyped-def]
+        assert product_id == self.product_id
+        return [
+            PublicProductImageRecord(
+                id=self.image_id,
+                object_key="products/example.jpg",
+                alt_text="教材封面",
+            )
+        ]
+
+    async def get_product_image(self, image_id):  # type: ignore[no-untyped-def]
+        if image_id != self.image_id:
+            return None
+        return PublicProductImageRecord(
+            id=self.image_id,
+            object_key="products/example.jpg",
+            alt_text="教材封面",
+        )
 
     async def count_latest_products(self) -> int:
         return 1
@@ -87,6 +131,62 @@ def test_public_market_routes_return_only_public_contract() -> None:
         "active_campuses": 1,
         "verified_sellers": 1,
     }
+
+
+def test_public_product_detail_returns_trust_summary_without_private_fields() -> None:
+    repository = FakeMarketRepository()
+    app = create_app(Settings(database_url=None, redis_url=None))
+    app.dependency_overrides[get_market_service] = lambda: MarketService(repository)
+    with TestClient(app) as client:
+        response = client.get(f"/api/v1/market/products/{repository.product_id}")
+
+    assert response.status_code == 200
+    assert response.json()["description"] == "少量笔记，无缺页。"
+    assert response.json()["seller"] == {
+        "id": str(repository.seller_id),
+        "display_name": "小林",
+        "campus_verified": True,
+        "review_count": 2,
+        "average_rating": "4.50",
+        "completed_orders": 3,
+    }
+    assert response.json()["images"] == [
+        {
+            "id": str(repository.image_id),
+            "url": f"/api/v1/market/product-images/{repository.image_id}",
+            "alt_text": "教材封面",
+        }
+    ]
+    assert "login_email" not in response.text
+    assert "object_key" not in response.text
+
+
+def test_public_product_detail_hides_unknown_or_non_public_products() -> None:
+    app = create_app(Settings(database_url=None, redis_url=None))
+    app.dependency_overrides[get_market_service] = lambda: MarketService(FakeMarketRepository())
+    with TestClient(app) as client:
+        response = client.get(f"/api/v1/market/products/{uuid4()}")
+    assert response.status_code == 404
+    assert response.json()["code"] == "product_not_found"
+
+
+def test_public_product_image_is_served_by_id_without_exposing_storage_key(tmp_path: Path) -> None:
+    repository = FakeMarketRepository()
+    image_path = tmp_path / "products" / "example.jpg"
+    image_path.parent.mkdir(parents=True)
+    image_path.write_bytes(b"\xff\xd8\xfftest")
+    app = create_app(
+        Settings(database_url=None, redis_url=None, public_product_storage_root=tmp_path)
+    )
+    app.dependency_overrides[get_market_service] = lambda: MarketService(repository)
+    with TestClient(app) as client:
+        response = client.get(f"/api/v1/market/product-images/{repository.image_id}")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "image/jpeg"
+    assert response.headers["cache-control"] == "private, no-store"
+    assert response.content == b"\xff\xd8\xfftest"
+    assert "products/example.jpg" not in response.text
 
 
 def test_public_market_product_limit_is_bounded() -> None:

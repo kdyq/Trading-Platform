@@ -49,6 +49,7 @@ class Settings(BaseSettings):
     campus_appeal_retention_days: int = Field(default=180, ge=30, le=730)
     campus_appeal_max_bytes: int = Field(default=10 * 1024 * 1024, ge=1024, le=25 * 1024 * 1024)
     private_storage_root: Path = Field(default=BACKEND_ROOT / "var" / "private")
+    public_product_storage_root: Path = Field(default=BACKEND_ROOT / "var" / "public-products")
     qq_smtp_username: str | None = Field(default=None, validation_alias="QQ_SMTP_USERNAME")
     qq_smtp_auth_code: SecretStr | None = Field(default=None, validation_alias="QQ_SMTP_AUTH_CODE")
     qq_smtp_from_name: str = Field(default="拾光集市", validation_alias="QQ_SMTP_FROM_NAME")
@@ -58,6 +59,12 @@ class Settings(BaseSettings):
         if self.private_storage_root.is_absolute():
             return self.private_storage_root.resolve()
         return (BACKEND_ROOT / self.private_storage_root).resolve()
+
+    @property
+    def resolved_public_product_storage_root(self) -> Path:
+        if self.public_product_storage_root.is_absolute():
+            return self.public_product_storage_root.resolve()
+        return (BACKEND_ROOT / self.public_product_storage_root).resolve()
 
 
 @lru_cache

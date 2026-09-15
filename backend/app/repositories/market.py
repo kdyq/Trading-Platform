@@ -8,8 +8,16 @@ from uuid import UUID
 from sqlalchemy import ColumnElement, Select, exists, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.catalog import Category, Product, ProductCondition, ProductStatus
-from app.models.identity import Campus, CampusVerification, CampusVerificationStatus, School, User
+from app.models.catalog import Category, Product, ProductCondition, ProductImage, ProductStatus
+from app.models.identity import (
+    Campus,
+    CampusVerification,
+    CampusVerificationStatus,
+    School,
+    User,
+    UserStatus,
+)
+from app.models.trade import Order, OrderStatus, Review
 
 
 @dataclass(frozen=True)
@@ -24,11 +32,27 @@ class PublicProductRecord:
     school_name: str
     seller_name: str
     seller_verified: bool
+    category_id: UUID
     category_code: str
     category_name: str
     condition: str
     is_negotiable: bool
     view_count: int
+
+
+@dataclass(frozen=True)
+class PublicProductDetailRecord(PublicProductRecord):
+    description: str
+    seller_review_count: int
+    seller_average_rating: Decimal | None
+    seller_completed_orders: int
+
+
+@dataclass(frozen=True)
+class PublicProductImageRecord:
+    id: UUID
+    object_key: str
+    alt_text: str | None
 
 
 @dataclass(frozen=True)
@@ -61,6 +85,16 @@ class MarketRepository(Protocol):
     async def search_products(
         self, *, filters: PublicProductFilters, offset: int, limit: int
     ) -> tuple[Sequence[PublicProductRecord], int]: ...
+
+    async def get_product(self, product_id: UUID) -> PublicProductDetailRecord | None: ...
+
+    async def list_similar_products(
+        self, *, product_id: UUID, category_id: UUID, limit: int
+    ) -> Sequence[PublicProductRecord]: ...
+
+    async def list_product_images(self, product_id: UUID) -> Sequence[PublicProductImageRecord]: ...
+
+    async def get_product_image(self, image_id: UUID) -> PublicProductImageRecord | None: ...
 
     async def count_latest_products(self) -> int: ...
 
@@ -102,6 +136,7 @@ class SqlAlchemyMarketRepository:
                 School.name.label("school_name"),
                 User.display_name.label("seller_name"),
                 self._verified_seller().label("seller_verified"),
+                Category.id.label("category_id"),
                 Category.code.label("category_code"),
                 Category.name.label("category_name"),
                 Product.condition,
@@ -118,6 +153,7 @@ class SqlAlchemyMarketRepository:
                 Campus.deleted_at.is_(None),
                 School.deleted_at.is_(None),
                 User.deleted_at.is_(None),
+                User.status == UserStatus.ACTIVE,
                 Category.deleted_at.is_(None),
                 Category.is_active.is_(True),
             )
@@ -156,14 +192,8 @@ class SqlAlchemyMarketRepository:
         return [PublicProductRecord(**dict(row._mapping)) for row in result]
 
     async def count_latest_products(self) -> int:
-        return int(
-            await self.session.scalar(
-                select(func.count(Product.id)).where(
-                    Product.deleted_at.is_(None), Product.status.in_(self.PUBLIC_STATUSES)
-                )
-            )
-            or 0
-        )
+        base = self._public_product_query().subquery()
+        return int(await self.session.scalar(select(func.count(base.c.id))) or 0)
 
     async def search_products(
         self, *, filters: PublicProductFilters, offset: int, limit: int
@@ -202,6 +232,104 @@ class SqlAlchemyMarketRepository:
         }[filters.sort]
         result = await self.session.execute(query.order_by(*ordering).offset(offset).limit(limit))
         return [PublicProductRecord(**dict(row._mapping)) for row in result], count
+
+    async def get_product(self, product_id: UUID) -> PublicProductDetailRecord | None:
+        review_count = (
+            select(func.count(Review.id))
+            .join(Order, Order.id == Review.order_id)
+            .where(
+                Order.status == OrderStatus.COMPLETED,
+                Order.seller_id == Product.seller_id,
+                Review.reviewee_id == Order.seller_id,
+                Review.reviewer_id == Order.buyer_id,
+            )
+            .correlate(Product)
+            .scalar_subquery()
+        )
+        average_rating = (
+            select(func.avg(Review.rating))
+            .join(Order, Order.id == Review.order_id)
+            .where(
+                Order.status == OrderStatus.COMPLETED,
+                Order.seller_id == Product.seller_id,
+                Review.reviewee_id == Order.seller_id,
+                Review.reviewer_id == Order.buyer_id,
+            )
+            .correlate(Product)
+            .scalar_subquery()
+        )
+        completed_orders = (
+            select(func.count(Order.id))
+            .where(
+                Order.seller_id == Product.seller_id,
+                Order.status == OrderStatus.COMPLETED,
+            )
+            .correlate(Product)
+            .scalar_subquery()
+        )
+        result = await self.session.execute(
+            self._public_product_query(self.ALL_PUBLIC_STATUSES)
+            .add_columns(
+                Product.description,
+                review_count.label("seller_review_count"),
+                average_rating.label("seller_average_rating"),
+                completed_orders.label("seller_completed_orders"),
+            )
+            .where(Product.id == product_id)
+        )
+        row = result.one_or_none()
+        return PublicProductDetailRecord(**dict(row._mapping)) if row else None
+
+    async def list_similar_products(
+        self, *, product_id: UUID, category_id: UUID, limit: int
+    ) -> Sequence[PublicProductRecord]:
+        result = await self.session.execute(
+            self._public_product_query()
+            .where(Product.id != product_id, Product.category_id == category_id)
+            .order_by(
+                Product.published_at.desc().nulls_last(), Product.created_at.desc(), Product.id
+            )
+            .limit(limit)
+        )
+        return [PublicProductRecord(**dict(row._mapping)) for row in result]
+
+    def _public_image_query(self) -> Select[tuple[UUID, str, str | None]]:
+        return (
+            select(ProductImage.id, ProductImage.object_key, ProductImage.alt_text)
+            .join(Product, Product.id == ProductImage.product_id)
+            .join(Campus, Campus.id == Product.campus_id)
+            .join(School, School.id == Campus.school_id)
+            .join(User, User.id == Product.seller_id)
+            .join(Category, Category.id == Product.category_id)
+            .where(
+                ProductImage.deleted_at.is_(None),
+                Product.deleted_at.is_(None),
+                Product.status.in_(self.ALL_PUBLIC_STATUSES),
+                Campus.deleted_at.is_(None),
+                Campus.is_active.is_(True),
+                School.deleted_at.is_(None),
+                School.is_active.is_(True),
+                User.deleted_at.is_(None),
+                User.status == UserStatus.ACTIVE,
+                Category.deleted_at.is_(None),
+                Category.is_active.is_(True),
+            )
+        )
+
+    async def list_product_images(self, product_id: UUID) -> Sequence[PublicProductImageRecord]:
+        result = await self.session.execute(
+            self._public_image_query()
+            .where(ProductImage.product_id == product_id)
+            .order_by(ProductImage.display_order, ProductImage.id)
+        )
+        return [PublicProductImageRecord(**dict(row._mapping)) for row in result]
+
+    async def get_product_image(self, image_id: UUID) -> PublicProductImageRecord | None:
+        result = await self.session.execute(
+            self._public_image_query().where(ProductImage.id == image_id)
+        )
+        row = result.one_or_none()
+        return PublicProductImageRecord(**dict(row._mapping)) if row else None
 
     async def get_summary(self) -> PublicMarketCounts:
         base = self._public_product_query().subquery()

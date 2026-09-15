@@ -36,6 +36,28 @@ class PublicProductSummary(BaseModel):
     image_alt: str | None = None
 
 
+class PublicSellerTrustSummary(BaseModel):
+    id: UUID
+    display_name: str
+    campus_verified: bool
+    review_count: int = Field(ge=0)
+    average_rating: Decimal | None
+    completed_orders: int = Field(ge=0)
+
+
+class PublicProductImageResponse(BaseModel):
+    id: UUID
+    url: str
+    alt_text: str | None
+
+
+class PublicProductDetailResponse(PublicProductSummary):
+    description: str
+    seller: PublicSellerTrustSummary
+    images: list[PublicProductImageResponse]
+    similar_products: list[PublicProductSummary]
+
+
 class PublicProductListResponse(BaseModel):
     items: list[PublicProductSummary]
     total: int = Field(ge=0)

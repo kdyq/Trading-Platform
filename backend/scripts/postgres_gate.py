@@ -18,6 +18,7 @@ POSTGRES_TESTS = (
     "tests/test_auth_rotation_postgres.py",
     "tests/test_product_image_migration_postgres.py",
     "tests/test_campus_binding_postgres.py",
+    "tests/test_market_queries_postgres.py",
 )
 
 
