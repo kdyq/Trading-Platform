@@ -88,6 +88,32 @@ class Product(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, VersionMixin
         Index("ix_products_campus_status", "campus_id", "status"),
         Index("ix_products_category_status", "category_id", "status"),
         Index("ix_products_created_at", "created_at"),
+        Index(
+            "ix_products_public_newest",
+            text("published_at DESC"),
+            "id",
+            postgresql_where=text(
+                "deleted_at IS NULL AND status IN ('on_sale', 'reserved', 'sold')"
+            ),
+        ),
+        Index(
+            "ix_products_public_category_price",
+            "category_id",
+            "price",
+            "id",
+            postgresql_where=text(
+                "deleted_at IS NULL AND status IN ('on_sale', 'reserved', 'sold')"
+            ),
+        ),
+        Index(
+            "ix_products_public_campus_price",
+            "campus_id",
+            "price",
+            "id",
+            postgresql_where=text(
+                "deleted_at IS NULL AND status IN ('on_sale', 'reserved', 'sold')"
+            ),
+        ),
     )
 
     seller_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"))
@@ -195,6 +221,7 @@ class Favorite(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __table_args__ = (
         UniqueConstraint("user_id", "product_id", name="uq_favorites_user_product"),
         Index("ix_favorites_product_id", "product_id"),
+        Index("ix_favorites_user_created", "user_id", text("created_at DESC"), "id"),
     )
 
     user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"))

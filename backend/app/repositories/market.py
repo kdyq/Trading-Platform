@@ -5,10 +5,18 @@ from decimal import Decimal
 from typing import Protocol
 from uuid import UUID
 
-from sqlalchemy import ColumnElement, Select, exists, func, select
+from sqlalchemy import ColumnElement, Select, delete, exists, func, or_, select
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.catalog import Category, Product, ProductCondition, ProductImage, ProductStatus
+from app.models.catalog import (
+    Category,
+    Favorite,
+    Product,
+    ProductCondition,
+    ProductImage,
+    ProductStatus,
+)
 from app.models.identity import (
     Campus,
     CampusVerification,
@@ -38,6 +46,7 @@ class PublicProductRecord:
     condition: str
     is_negotiable: bool
     view_count: int
+    favorite_count: int
 
 
 @dataclass(frozen=True)
@@ -101,6 +110,14 @@ class MarketRepository(Protocol):
 
     async def get_summary(self) -> PublicMarketCounts: ...
 
+    async def add_favorite(self, user_id: UUID, product_id: UUID) -> bool: ...
+
+    async def remove_favorite(self, user_id: UUID, product_id: UUID) -> None: ...
+
+    async def favorite_status(self, user_id: UUID, product_id: UUID) -> tuple[bool, int]: ...
+
+    async def list_favorites(self, user_id: UUID) -> Sequence[PublicProductRecord]: ...
+
 
 class SqlAlchemyMarketRepository:
     PUBLIC_STATUSES = (ProductStatus.ON_SALE, ProductStatus.RESERVED)
@@ -125,6 +142,12 @@ class SqlAlchemyMarketRepository:
     def _public_product_query(
         self, statuses: tuple[ProductStatus, ...] | None = None
     ) -> Select[tuple[object, ...]]:
+        favorite_count = (
+            select(func.count(Favorite.id))
+            .where(Favorite.product_id == Product.id)
+            .correlate(Product)
+            .scalar_subquery()
+        )
         return (
             select(
                 Product.id,
@@ -143,6 +166,7 @@ class SqlAlchemyMarketRepository:
                 Product.condition,
                 Product.is_negotiable,
                 Product.view_count,
+                favorite_count.label("favorite_count"),
             )
             .join(Campus, Campus.id == Product.campus_id)
             .join(School, School.id == Campus.school_id)
@@ -205,7 +229,14 @@ class SqlAlchemyMarketRepository:
         else:
             query = query.where(Product.status == filters.status)
         if filters.keyword:
-            query = query.where(Product.title.contains(filters.keyword, autoescape=True))
+            escaped = filters.keyword.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+            pattern = f"%{escaped}%"
+            query = query.where(
+                or_(
+                    Product.title.ilike(pattern, escape="\\"),
+                    Product.description.ilike(pattern, escape="\\"),
+                )
+            )
         if filters.category:
             query = query.where(Category.code == filters.category)
         if filters.campus_id:
@@ -355,3 +386,56 @@ class SqlAlchemyMarketRepository:
             active_campuses=int(row[1] or 0),
             verified_sellers=int(row[2] or 0),
         )
+
+    async def add_favorite(self, user_id: UUID, product_id: UUID) -> bool:
+        visible = await self.session.scalar(
+            select(Product.id).where(
+                Product.id == product_id,
+                Product.deleted_at.is_(None),
+                Product.status.in_(self.PUBLIC_STATUSES),
+            )
+        )
+        if visible is None:
+            return False
+        await self.session.execute(
+            insert(Favorite)
+            .values(user_id=user_id, product_id=product_id)
+            .on_conflict_do_nothing(constraint="uq_favorites_user_product")
+        )
+        await self.session.flush()
+        return True
+
+    async def remove_favorite(self, user_id: UUID, product_id: UUID) -> None:
+        await self.session.execute(
+            delete(Favorite).where(
+                Favorite.user_id == user_id,
+                Favorite.product_id == product_id,
+            )
+        )
+
+    async def favorite_status(self, user_id: UUID, product_id: UUID) -> tuple[bool, int]:
+        is_favorite = (
+            await self.session.scalar(
+                select(Favorite.id).where(
+                    Favorite.user_id == user_id,
+                    Favorite.product_id == product_id,
+                )
+            )
+            is not None
+        )
+        count = int(
+            await self.session.scalar(
+                select(func.count(Favorite.id)).where(Favorite.product_id == product_id)
+            )
+            or 0
+        )
+        return is_favorite, count
+
+    async def list_favorites(self, user_id: UUID) -> Sequence[PublicProductRecord]:
+        result = await self.session.execute(
+            self._public_product_query(self.ALL_PUBLIC_STATUSES)
+            .join(Favorite, Favorite.product_id == Product.id)
+            .where(Favorite.user_id == user_id)
+            .order_by(Favorite.created_at.desc(), Product.id)
+        )
+        return [PublicProductRecord(**dict(row._mapping)) for row in result]

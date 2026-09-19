@@ -13,19 +13,21 @@ beforeEach(() => {
       const url = String(input)
       const payload = url.includes('/seller/products')
         ? { items: [] }
-        : url.includes('/market/categories') || url.includes('/market/campuses')
-          ? []
-          : url.includes('/market/products')
-            ? { items: [], total: 0, page: 1, page_size: 4 }
-            : url.includes('/market/summary')
-              ? { available_products: 0, active_campuses: 0, verified_sellers: 0 }
-              : {
-                  status: 'ready',
-                  dependencies: {
-                    database: { status: 'ready', reason: null },
-                    redis: { status: 'ready', reason: null },
-                  },
-                }
+        : url.endsWith('/api/v1/favorites')
+          ? { items: [], total: 0, page: 1, page_size: 1 }
+          : url.includes('/market/categories') || url.includes('/market/campuses')
+            ? []
+            : url.includes('/market/products')
+              ? { items: [], total: 0, page: 1, page_size: 4 }
+              : url.includes('/market/summary')
+                ? { available_products: 0, active_campuses: 0, verified_sellers: 0 }
+                : {
+                    status: 'ready',
+                    dependencies: {
+                      database: { status: 'ready', reason: null },
+                      redis: { status: 'ready', reason: null },
+                    },
+                  }
       return Promise.resolve(new Response(JSON.stringify(payload), { status: 200 }))
     }),
   )
@@ -65,7 +67,7 @@ describe('application routes', () => {
     ['/register', '注册拾光集市', false],
     ['/forgot-password', '找回密码', false],
     ['/my-products', '我的发布', true],
-    ['/favorites', '我的收藏', false],
+    ['/favorites', '我的收藏', true],
     ['/orders', '我的订单', false],
     ['/admin', '管理端工程已就绪', false],
     ['/missing', '这个摊位还没有摆出来', false],

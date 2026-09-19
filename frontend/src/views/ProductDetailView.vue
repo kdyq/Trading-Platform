@@ -3,7 +3,7 @@ import { computed, onUnmounted, ref, watch } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 
 import { ApiError } from '../api/client'
-import { getProductDetail } from '../api/market'
+import { addFavorite, getFavoriteStatus, getProductDetail, removeFavorite } from '../api/market'
 import type { PublicProductDetail } from '../api/market'
 import ProductCard from '../components/market/ProductCard.vue'
 import ProductGallery from '../components/market/ProductGallery.vue'
@@ -18,6 +18,9 @@ const product = ref<PublicProductDetail | null>(null)
 const loading = ref(true)
 const notFound = ref(false)
 const error = ref('')
+const favorited = ref(false)
+const favoriteCount = ref(0)
+const favoriteBusy = ref(false)
 const gate = ref<'login' | 'verification' | 'later' | null>(null)
 const gateIntent = ref<'action' | 'report'>('action')
 let controller: AbortController | undefined
@@ -84,6 +87,35 @@ function openGate(intent: 'action' | 'report' = 'action') {
   else gate.value = 'later'
 }
 
+async function toggleFavorite() {
+  if (actionDisabled.value || !product.value) return
+  if (!auth.user) {
+    gate.value = 'login'
+    return
+  }
+  if (auth.user.campus_verification_status !== 'verified') {
+    gate.value = 'verification'
+    return
+  }
+  if (!auth.accessToken || favoriteBusy.value) return
+  favoriteBusy.value = true
+  try {
+    if (favorited.value) {
+      await removeFavorite(auth.accessToken, product.value.id)
+      favorited.value = false
+      favoriteCount.value = Math.max(0, favoriteCount.value - 1)
+    } else {
+      const status = await addFavorite(auth.accessToken, product.value.id)
+      favorited.value = status.favorited
+      favoriteCount.value = status.favorite_count
+    }
+  } catch (caught) {
+    error.value = caught instanceof Error ? caught.message : '收藏操作失败'
+  } finally {
+    favoriteBusy.value = false
+  }
+}
+
 async function loadProduct() {
   controller?.abort()
   const requestController = new AbortController()
@@ -97,6 +129,18 @@ async function loadProduct() {
     const loadedProduct = await getProductDetail(String(route.params.id), requestController.signal)
     if (controller !== requestController) return
     product.value = loadedProduct
+    favoriteCount.value = loadedProduct.favorite_count
+    favorited.value = false
+    if (auth.accessToken && auth.user?.id !== loadedProduct.seller.id) {
+      try {
+        const status = await getFavoriteStatus(auth.accessToken, loadedProduct.id)
+        if (controller !== requestController) return
+        favorited.value = status.favorited
+        favoriteCount.value = status.favorite_count
+      } catch {
+        // Detail remains usable when the optional personal favorite status is unavailable.
+      }
+    }
     setMeta(
       `${product.value.title}｜拾光集市`,
       `${product.value.school_name}${product.value.campus_name}的${product.value.category_name}二手商品，¥${product.value.price}。`,
@@ -170,8 +214,12 @@ onUnmounted(() => {
           <p class="product-location">{{ product.school_name }} · {{ product.campus_name }}</p>
 
           <div class="product-main-actions">
-            <UiButton variant="secondary" :disabled="actionDisabled" @click="openGate()">
-              收藏
+            <UiButton
+              variant="secondary"
+              :disabled="actionDisabled || favoriteBusy"
+              @click="toggleFavorite"
+            >
+              {{ favorited ? '取消收藏' : '收藏' }} · {{ favoriteCount }}
             </UiButton>
             <UiButton :disabled="actionDisabled" @click="openGate()">
               联系卖家 / 发起交易

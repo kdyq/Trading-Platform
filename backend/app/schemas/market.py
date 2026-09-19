@@ -32,6 +32,7 @@ class PublicProductSummary(BaseModel):
     condition: str
     is_negotiable: bool
     view_count: int = Field(ge=0)
+    favorite_count: int = Field(ge=0)
     image_url: str | None = None
     image_alt: str | None = None
 
@@ -69,3 +70,8 @@ class PublicMarketSummaryResponse(BaseModel):
     available_products: int = Field(ge=0)
     active_campuses: int = Field(ge=0)
     verified_sellers: int = Field(ge=0)
+
+
+class FavoriteStatusResponse(BaseModel):
+    favorited: bool
+    favorite_count: int = Field(ge=0)

@@ -22,6 +22,7 @@ const product = {
   condition: 'good',
   is_negotiable: true,
   view_count: 12,
+  favorite_count: 2,
   image_url: null,
   image_alt: null,
   description: '少量笔记，无缺页。',
@@ -102,6 +103,29 @@ describe('product detail', () => {
     })
     await wrapper.get('.product-main-actions .ui-button-primary').trigger('click')
     expect(document.body.textContent).toContain('完成校园认证')
+    wrapper.unmount()
+  })
+
+  it('persists a verified buyer favorite from the detail page', async () => {
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).includes('/favorites/') && init?.method === 'PUT') {
+        return Promise.resolve(
+          new Response(JSON.stringify({ favorited: true, favorite_count: 3 }), { status: 200 }),
+        )
+      }
+      return Promise.resolve(new Response(JSON.stringify(product), { status: 200 }))
+    })
+    const { wrapper } = await renderDetail(product, 200, fetchMock)
+    useAuthStore().applySession('token', {
+      id: 'buyer-1',
+      login_email: 'buyer@example.edu.cn',
+      display_name: '买家',
+      status: 'active',
+      campus_verification_status: 'verified',
+    })
+    await wrapper.get('.product-main-actions .ui-button-secondary').trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('取消收藏 · 3')
     wrapper.unmount()
   })
 

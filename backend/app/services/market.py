@@ -7,6 +7,7 @@ from app.repositories.market import (
     PublicProductImageRecord,
 )
 from app.schemas.market import (
+    FavoriteStatusResponse,
     PublicCampusResponse,
     PublicCategoryResponse,
     PublicMarketSummaryResponse,
@@ -108,3 +109,29 @@ class MarketService:
                 status_code=404, code="product_image_not_found", message="商品图片不存在"
             )
         return image
+
+    async def add_favorite(self, user_id: UUID, product_id: UUID) -> FavoriteStatusResponse:
+        if not await self.repository.add_favorite(user_id, product_id):
+            raise AppError(
+                status_code=404, code="product_not_found", message="商品不存在或不可收藏"
+            )
+        return await self.favorite_status(user_id, product_id)
+
+    async def remove_favorite(self, user_id: UUID, product_id: UUID) -> None:
+        await self.repository.remove_favorite(user_id, product_id)
+
+    async def favorite_status(self, user_id: UUID, product_id: UUID) -> FavoriteStatusResponse:
+        favorited, count = await self.repository.favorite_status(user_id, product_id)
+        return FavoriteStatusResponse(favorited=favorited, favorite_count=count)
+
+    async def favorites(self, user_id: UUID) -> PublicProductListResponse:
+        records = await self.repository.list_favorites(user_id)
+        return PublicProductListResponse(
+            items=[
+                PublicProductSummary.model_validate(record, from_attributes=True)
+                for record in records
+            ],
+            total=len(records),
+            page=1,
+            page_size=max(1, len(records)),
+        )

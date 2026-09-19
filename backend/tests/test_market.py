@@ -4,6 +4,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from uuid import uuid4
 
+import pytest
 from fastapi.testclient import TestClient
 
 from app.api.dependencies import get_market_service
@@ -25,6 +26,7 @@ class FakeMarketRepository:
         self.product_id = uuid4()
         self.seller_id = uuid4()
         self.image_id = uuid4()
+        self.favorited = False
 
     async def list_categories(self):  # type: ignore[no-untyped-def]
         return [SimpleNamespace(id=self.category_id, code="books", name="教材书籍")]
@@ -49,6 +51,7 @@ class FakeMarketRepository:
                 condition="good",
                 is_negotiable=True,
                 view_count=3,
+                favorite_count=2,
             )
         ]
 
@@ -108,6 +111,21 @@ class FakeMarketRepository:
     async def get_summary(self) -> PublicMarketCounts:
         return PublicMarketCounts(available_products=1, active_campuses=1, verified_sellers=1)
 
+    async def add_favorite(self, user_id, product_id):  # type: ignore[no-untyped-def]
+        if product_id != self.product_id:
+            return False
+        self.favorited = True
+        return True
+
+    async def remove_favorite(self, user_id, product_id):  # type: ignore[no-untyped-def]
+        self.favorited = False
+
+    async def favorite_status(self, user_id, product_id):  # type: ignore[no-untyped-def]
+        return self.favorited and product_id == self.product_id, 3 if self.favorited else 2
+
+    async def list_favorites(self, user_id):  # type: ignore[no-untyped-def]
+        return await self.list_latest_products(limit=4)
+
 
 def test_public_market_routes_return_only_public_contract() -> None:
     repository = FakeMarketRepository()
@@ -126,6 +144,7 @@ def test_public_market_routes_return_only_public_contract() -> None:
     assert products.status_code == 200
     assert products.json()["total"] == 1
     assert products.json()["items"][0]["title"] == "高等数学教材"
+    assert products.json()["items"][0]["favorite_count"] == 2
     assert "seller_id" not in products.json()["items"][0]
     assert "login_email" not in products.text
     assert summary.json() == {
@@ -170,6 +189,24 @@ def test_public_product_detail_hides_unknown_or_non_public_products() -> None:
         response = client.get(f"/api/v1/market/products/{uuid4()}")
     assert response.status_code == 404
     assert response.json()["code"] == "product_not_found"
+
+
+@pytest.mark.anyio
+async def test_favorites_are_idempotent_and_return_public_products() -> None:
+    repository = FakeMarketRepository()
+    service = MarketService(repository)
+    user_id = uuid4()
+
+    first = await service.add_favorite(user_id, repository.product_id)
+    second = await service.add_favorite(user_id, repository.product_id)
+    favorites = await service.favorites(user_id)
+    await service.remove_favorite(user_id, repository.product_id)
+    removed = await service.favorite_status(user_id, repository.product_id)
+
+    assert first.favorited is True and first.favorite_count == 3
+    assert second == first
+    assert favorites.total == 1
+    assert removed.favorited is False and removed.favorite_count == 2
 
 
 def test_public_product_image_is_served_by_id_without_exposing_storage_key(tmp_path: Path) -> None:

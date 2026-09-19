@@ -30,6 +30,7 @@ def product_fixture(status: str = "on_sale") -> dict[str, object]:
         "condition": "good",
         "is_negotiable": True,
         "view_count": 12,
+        "favorite_count": 2,
         "image_url": None,
         "image_alt": None,
         "description": "少量笔记，无缺页。",

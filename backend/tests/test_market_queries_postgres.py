@@ -217,6 +217,7 @@ async def _exercise_market_queries(database_url: str) -> None:
                 filters=PublicProductFilters(), offset=0, limit=12
             )
             assert total == 2
+            assert all(item.favorite_count == 0 for item in items)
             verification_by_id = {item.id: item.seller_verified for item in items}
             assert verification_by_id == {product_id: True, similar_id: False}
 
@@ -224,6 +225,24 @@ async def _exercise_market_queries(database_url: str) -> None:
                 product_id=product_id, category_id=detail.category_id, limit=4
             )
             assert [item.id for item in similar] == [similar_id]
+
+            assert await repository.add_favorite(buyer_id, product_id) is True
+            assert await repository.add_favorite(buyer_id, product_id) is True
+            assert await repository.favorite_status(buyer_id, product_id) == (True, 1)
+            favorites = await repository.list_favorites(buyer_id)
+            assert [item.id for item in favorites] == [product_id]
+            await repository.remove_favorite(buyer_id, product_id)
+            assert await repository.favorite_status(buyer_id, product_id) == (False, 0)
+
+            plan = await session.execute(
+                text(
+                    "EXPLAIN SELECT id FROM products "
+                    "WHERE deleted_at IS NULL AND status IN ('on_sale', 'reserved', 'sold') "
+                    "AND category_id = :category ORDER BY price, id LIMIT 12"
+                ),
+                {"category": detail.category_id},
+            )
+            assert "Limit" in "\n".join(str(row[0]) for row in plan)
     finally:
         await engine.dispose()
         async with admin_engine.begin() as connection:

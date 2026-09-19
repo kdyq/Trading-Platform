@@ -54,8 +54,7 @@ const router = createRouter({
         {
           path: 'favorites',
           name: 'favorites',
-          component: () => import('../views/AccountCollectionView.vue'),
-          meta: { title: '我的收藏', description: '当前没有可展示的收藏。' },
+          component: () => import('../views/FavoritesView.vue'),
         },
         {
           path: 'orders',

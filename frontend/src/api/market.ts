@@ -21,6 +21,7 @@ export interface PublicProduct {
   condition: 'new' | 'like_new' | 'good' | 'fair'
   is_negotiable: boolean
   view_count: number
+  favorite_count: number
   image_url: string | null
   image_alt: string | null
 }
@@ -79,6 +80,11 @@ export interface PublicMarketSummary {
   verified_sellers: number
 }
 
+export interface FavoriteStatus {
+  favorited: boolean
+  favorite_count: number
+}
+
 export async function getMarketCategories() {
   return getJson<PublicCategory[]>('/api/v1/market/categories')
 }
@@ -105,4 +111,27 @@ export async function getProductDetail(id: string, signal?: AbortSignal) {
 
 export async function getMarketSummary() {
   return getJson<PublicMarketSummary>('/api/v1/market/summary')
+}
+
+export function getFavoriteStatus(accessToken: string, productId: string) {
+  return requestJson<FavoriteStatus>(`/api/v1/favorites/${productId}`, { accessToken })
+}
+
+export function addFavorite(accessToken: string, productId: string) {
+  return requestJson<FavoriteStatus>(`/api/v1/favorites/${productId}`, {
+    method: 'PUT',
+    accessToken,
+  })
+}
+
+export function removeFavorite(accessToken: string, productId: string) {
+  return requestJson<void>(`/api/v1/favorites/${productId}`, {
+    method: 'DELETE',
+    accessToken,
+    acceptedStatuses: [204],
+  })
+}
+
+export function getFavorites(accessToken: string) {
+  return requestJson<PublicProductList>('/api/v1/favorites', { accessToken })
 }
