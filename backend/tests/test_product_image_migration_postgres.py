@@ -92,9 +92,9 @@ async def _exercise_migration(database_url: str) -> None:
         )
         await connection.execute(
             "INSERT INTO product_images "
-            "(id, product_id, object_key, display_order, deleted_at) VALUES "
-            "($1, $3, 'test/deleted.jpg', 0, now()), "
-            "($2, $3, 'test/active.jpg', 0, NULL)",
+            "(id, product_id, object_key, thumbnail_object_key, display_order, deleted_at) VALUES "
+            "($1, $3, 'test/deleted.jpg', 'test/deleted.webp', 0, now()), "
+            "($2, $3, 'test/active.jpg', 'test/active.webp', 0, NULL)",
             uuid4(),
             uuid4(),
             product_id,

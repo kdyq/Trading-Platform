@@ -80,6 +80,10 @@ class Product(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, VersionMixin
     __tablename__ = "products"
     __table_args__ = (
         CheckConstraint("price >= 0", name="price_nonnegative"),
+        CheckConstraint(
+            "original_price IS NULL OR original_price >= 0",
+            name="original_price_nonnegative",
+        ),
         Index("ix_products_seller_status", "seller_id", "status"),
         Index("ix_products_campus_status", "campus_id", "status"),
         Index("ix_products_category_status", "category_id", "status"),
@@ -92,6 +96,7 @@ class Product(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, VersionMixin
     title: Mapped[str] = mapped_column(String(120))
     description: Mapped[str] = mapped_column(Text)
     price: Mapped[Decimal] = mapped_column(Numeric(12, 2))
+    original_price: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
     condition: Mapped[ProductCondition] = mapped_column(
         Enum(
             ProductCondition,
@@ -105,6 +110,7 @@ class Product(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, VersionMixin
     )
     is_negotiable: Mapped[bool] = mapped_column(default=False, server_default=text("false"))
     view_count: Mapped[int] = mapped_column(default=0, server_default=text("0"))
+    delivery_notes: Mapped[str | None] = mapped_column(Text)
     status: Mapped[ProductStatus] = mapped_column(
         Enum(
             ProductStatus,
@@ -142,6 +148,7 @@ class ProductImage(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, Base):
         ForeignKey("products.id", ondelete="RESTRICT"), index=True
     )
     object_key: Mapped[str] = mapped_column(String(512))
+    thumbnail_object_key: Mapped[str] = mapped_column(String(512))
     alt_text: Mapped[str | None] = mapped_column(String(255))
     display_order: Mapped[int] = mapped_column(default=0, server_default=text("0"))
 

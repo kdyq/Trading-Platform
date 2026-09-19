@@ -52,6 +52,7 @@ class PublicProductDetailRecord(PublicProductRecord):
 class PublicProductImageRecord:
     id: UUID
     object_key: str
+    thumbnail_object_key: str
     alt_text: str | None
 
 
@@ -293,9 +294,14 @@ class SqlAlchemyMarketRepository:
         )
         return [PublicProductRecord(**dict(row._mapping)) for row in result]
 
-    def _public_image_query(self) -> Select[tuple[UUID, str, str | None]]:
+    def _public_image_query(self) -> Select[tuple[UUID, str, str, str | None]]:
         return (
-            select(ProductImage.id, ProductImage.object_key, ProductImage.alt_text)
+            select(
+                ProductImage.id,
+                ProductImage.object_key,
+                ProductImage.thumbnail_object_key,
+                ProductImage.alt_text,
+            )
             .join(Product, Product.id == ProductImage.product_id)
             .join(Campus, Campus.id == Product.campus_id)
             .join(School, School.id == Campus.school_id)

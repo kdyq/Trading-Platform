@@ -104,6 +104,23 @@ async def product_image(
     )
 
 
+@router.get("/product-image-thumbnails/{image_id}", response_class=FileResponse)
+async def product_image_thumbnail(
+    image_id: UUID,
+    service: Annotated[MarketService, Depends(get_market_service)],
+    settings: Annotated[Settings, Depends(get_settings_from_request)],
+) -> FileResponse:
+    image = await service.product_image(image_id)
+    stored = PublicProductStorage(settings.resolved_public_product_storage_root).resolve(
+        image.thumbnail_object_key
+    )
+    return FileResponse(
+        stored.path,
+        media_type=stored.media_type,
+        headers={"Cache-Control": "private, no-store"},
+    )
+
+
 @router.get("/summary", response_model=PublicMarketSummaryResponse)
 async def summary(
     service: Annotated[MarketService, Depends(get_market_service)],

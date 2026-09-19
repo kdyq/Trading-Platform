@@ -20,6 +20,10 @@ from app.repositories.product_images import (
     ProductImageUploadRepository,
     SqlAlchemyProductImageUploadRepository,
 )
+from app.repositories.seller_products import (
+    SellerProductRepository,
+    SqlAlchemySellerProductRepository,
+)
 from app.services.account import AccountService
 from app.services.auth import AuthService
 from app.services.campus import CampusService
@@ -42,6 +46,7 @@ from app.services.market import MarketService
 from app.services.private_storage import PrivateAppealStorage
 from app.services.product_images import ProductImageProcessor, ProductImageUploadService
 from app.services.product_storage import LocalObjectStorage
+from app.services.seller_products import SellerProductService
 
 catalog_cache = CatalogCache()
 
@@ -84,6 +89,12 @@ def get_product_image_upload_repository(
     session: Annotated[AsyncSession, Depends(get_database_session)],
 ) -> ProductImageUploadRepository:
     return SqlAlchemyProductImageUploadRepository(session)
+
+
+def get_seller_product_repository(
+    session: Annotated[AsyncSession, Depends(get_database_session)],
+) -> SellerProductRepository:
+    return SqlAlchemySellerProductRepository(session)
 
 
 @lru_cache
@@ -238,4 +249,16 @@ def get_product_image_upload_service(
         ),
         max_uploads=settings.product_image_max_uploads,
         upload_hours=settings.product_image_upload_hours,
+    )
+
+
+def get_seller_product_service(
+    repository: Annotated[SellerProductRepository, Depends(get_seller_product_repository)],
+    uploads: Annotated[ProductImageUploadRepository, Depends(get_product_image_upload_repository)],
+    settings: Annotated[Settings, Depends(get_settings_from_request)],
+) -> SellerProductService:
+    return SellerProductService(
+        repository=repository,
+        uploads=uploads,
+        storage=LocalObjectStorage(settings.resolved_public_product_storage_root),
     )

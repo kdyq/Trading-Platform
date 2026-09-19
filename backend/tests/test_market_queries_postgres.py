@@ -118,9 +118,11 @@ async def _exercise_market_queries(database_url: str) -> None:
             await connection.execute(
                 text(
                     "INSERT INTO product_images "
-                    "(id, product_id, object_key, alt_text, display_order) VALUES "
-                    "(:first, :product, 'products/first.jpg', '第一张', 0), "
-                    "(:second, :product, 'products/second.png', '第二张', 1)"
+                    "(id, product_id, object_key, thumbnail_object_key, alt_text, display_order) "
+                    "VALUES "
+                    "(:first, :product, 'products/first.jpg', 'products/first.webp', '第一张', 0), "
+                    "(:second, :product, 'products/second.png', "
+                    "'products/second.webp', '第二张', 1)"
                 ),
                 {"first": first_image_id, "second": second_image_id, "product": product_id},
             )

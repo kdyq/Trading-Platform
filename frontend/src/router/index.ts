@@ -39,8 +39,17 @@ const router = createRouter({
         {
           path: 'my-products',
           name: 'my-products',
-          component: () => import('../views/AccountCollectionView.vue'),
-          meta: { title: '我的发布', description: '商品发布功能将在商品阶段开放。' },
+          component: () => import('../views/MyProductsView.vue'),
+        },
+        {
+          path: 'sell',
+          name: 'product-create',
+          component: () => import('../views/ProductPublishView.vue'),
+        },
+        {
+          path: 'sell/:id',
+          name: 'product-edit',
+          component: () => import('../views/ProductPublishView.vue'),
         },
         {
           path: 'favorites',

@@ -20,6 +20,7 @@ async function logout() {
         <div class="navigation-actions">
           <RouterLink class="navigation-link" to="/market"> 逛好物 </RouterLink>
           <template v-if="auth.user">
+            <RouterLink class="navigation-link" to="/sell">发布闲置</RouterLink>
             <RouterLink class="navigation-link" to="/account">
               {{ auth.user.display_name }}
             </RouterLink>

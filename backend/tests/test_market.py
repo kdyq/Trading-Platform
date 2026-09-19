@@ -87,6 +87,7 @@ class FakeMarketRepository:
             PublicProductImageRecord(
                 id=self.image_id,
                 object_key="products/example.jpg",
+                thumbnail_object_key="products/example-thumb.webp",
                 alt_text="教材封面",
             )
         ]
@@ -97,6 +98,7 @@ class FakeMarketRepository:
         return PublicProductImageRecord(
             id=self.image_id,
             object_key="products/example.jpg",
+            thumbnail_object_key="products/example-thumb.webp",
             alt_text="教材封面",
         )
 

@@ -138,16 +138,16 @@ async def _exercise_commerce_constraints(database_url: str) -> None:
             await connection.execute(
                 text(
                     "INSERT INTO product_images "
-                    "(id, product_id, object_key, display_order) "
-                    "VALUES (:id, :product, 'test/first.jpg', 0)"
+                    "(id, product_id, object_key, thumbnail_object_key, display_order) "
+                    "VALUES (:id, :product, 'test/first.jpg', 'test/first.webp', 0)"
                 ),
                 {"id": first_image_id, "product": product_id},
             )
             await _expect_integrity_error(
                 connection,
                 "INSERT INTO product_images "
-                "(id, product_id, object_key, display_order) "
-                "VALUES (:id, :product, 'test/duplicate.jpg', 0)",
+                "(id, product_id, object_key, thumbnail_object_key, display_order) "
+                "VALUES (:id, :product, 'test/duplicate.jpg', 'test/duplicate.webp', 0)",
                 {"id": uuid4(), "product": product_id},
             )
             await connection.execute(
@@ -157,8 +157,8 @@ async def _exercise_commerce_constraints(database_url: str) -> None:
             await connection.execute(
                 text(
                     "INSERT INTO product_images "
-                    "(id, product_id, object_key, display_order) "
-                    "VALUES (:id, :product, 'test/replacement.jpg', 0)"
+                    "(id, product_id, object_key, thumbnail_object_key, display_order) "
+                    "VALUES (:id, :product, 'test/replacement.jpg', 'test/replacement.webp', 0)"
                 ),
                 {"id": uuid4(), "product": product_id},
             )
