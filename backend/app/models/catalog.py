@@ -39,6 +39,12 @@ class ProductCondition(StrEnum):
     FAIR = "fair"
 
 
+class ProductImageUploadStatus(StrEnum):
+    TEMPORARY = "temporary"
+    CONFIRMED = "confirmed"
+    DELETED = "deleted"
+
+
 class Category(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, VersionMixin, Base):
     __tablename__ = "categories"
     __table_args__ = (
@@ -140,6 +146,41 @@ class ProductImage(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, Base):
     display_order: Mapped[int] = mapped_column(default=0, server_default=text("0"))
 
     product: Mapped[Product] = relationship(back_populates="images")
+
+
+class ProductImageUpload(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "product_image_uploads"
+    __table_args__ = (
+        UniqueConstraint("original_key", name="uq_product_image_uploads_original_key"),
+        UniqueConstraint("thumbnail_key", name="uq_product_image_uploads_thumbnail_key"),
+        CheckConstraint("size_bytes > 0", name="size_positive"),
+        CheckConstraint("width > 0 AND height > 0", name="dimensions_positive"),
+        Index("ix_product_image_uploads_owner_status", "owner_id", "status"),
+        Index("ix_product_image_uploads_status_expires", "status", "expires_at"),
+    )
+
+    owner_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"))
+    original_key: Mapped[str] = mapped_column(String(512))
+    thumbnail_key: Mapped[str] = mapped_column(String(512))
+    original_filename: Mapped[str] = mapped_column(String(255))
+    media_type: Mapped[str] = mapped_column(String(80))
+    size_bytes: Mapped[int]
+    width: Mapped[int]
+    height: Mapped[int]
+    status: Mapped[ProductImageUploadStatus] = mapped_column(
+        Enum(
+            ProductImageUploadStatus,
+            values_callable=lambda members: [member.value for member in members],
+            native_enum=False,
+            create_constraint=True,
+            name="product_image_upload_status",
+        ),
+        default=ProductImageUploadStatus.TEMPORARY,
+        server_default=ProductImageUploadStatus.TEMPORARY.value,
+    )
+    expires_at: Mapped[datetime]
+    confirmed_at: Mapped[datetime | None]
+    deleted_at: Mapped[datetime | None]
 
 
 class Favorite(UUIDPrimaryKeyMixin, TimestampMixin, Base):

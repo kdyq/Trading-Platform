@@ -16,6 +16,10 @@ from app.repositories.identity import (
     SqlAlchemyIdentityRepository,
 )
 from app.repositories.market import MarketRepository, SqlAlchemyMarketRepository
+from app.repositories.product_images import (
+    ProductImageUploadRepository,
+    SqlAlchemyProductImageUploadRepository,
+)
 from app.services.account import AccountService
 from app.services.auth import AuthService
 from app.services.campus import CampusService
@@ -36,6 +40,8 @@ from app.services.mailer import (
 )
 from app.services.market import MarketService
 from app.services.private_storage import PrivateAppealStorage
+from app.services.product_images import ProductImageProcessor, ProductImageUploadService
+from app.services.product_storage import LocalObjectStorage
 
 catalog_cache = CatalogCache()
 
@@ -72,6 +78,12 @@ def get_catalog_repository(
     session: Annotated[AsyncSession, Depends(get_database_session)],
 ) -> CatalogRepository:
     return SqlAlchemyCatalogRepository(session)
+
+
+def get_product_image_upload_repository(
+    session: Annotated[AsyncSession, Depends(get_database_session)],
+) -> ProductImageUploadRepository:
+    return SqlAlchemyProductImageUploadRepository(session)
 
 
 @lru_cache
@@ -209,3 +221,21 @@ def get_catalog_service(
     repository: Annotated[CatalogRepository, Depends(get_catalog_repository)],
 ) -> CatalogService:
     return CatalogService(repository, catalog_cache)
+
+
+def get_product_image_upload_service(
+    repository: Annotated[
+        ProductImageUploadRepository, Depends(get_product_image_upload_repository)
+    ],
+    settings: Annotated[Settings, Depends(get_settings_from_request)],
+) -> ProductImageUploadService:
+    return ProductImageUploadService(
+        repository=repository,
+        storage=LocalObjectStorage(settings.resolved_public_product_storage_root),
+        processor=ProductImageProcessor(
+            max_bytes=settings.product_image_max_bytes,
+            max_pixels=settings.product_image_max_pixels,
+        ),
+        max_uploads=settings.product_image_max_uploads,
+        upload_hours=settings.product_image_upload_hours,
+    )

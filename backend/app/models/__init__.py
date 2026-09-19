@@ -1,7 +1,15 @@
 """SQLAlchemy 领域模型。"""
 
 from app.models.base import Base
-from app.models.catalog import Category, Favorite, Product, ProductImage, ProductStatus
+from app.models.catalog import (
+    Category,
+    Favorite,
+    Product,
+    ProductImage,
+    ProductImageUpload,
+    ProductImageUploadStatus,
+    ProductStatus,
+)
 from app.models.identity import (
     Campus,
     CampusAppealStatus,
@@ -54,6 +62,8 @@ __all__ = [
     "PasswordResetToken",
     "Product",
     "ProductImage",
+    "ProductImageUpload",
+    "ProductImageUploadStatus",
     "ProductStatus",
     "Report",
     "ReportStatus",
