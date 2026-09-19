@@ -43,14 +43,23 @@ class Category(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, VersionMixi
     __tablename__ = "categories"
     __table_args__ = (
         UniqueConstraint("code", name="uq_categories_code"),
+        UniqueConstraint("slug", name="uq_categories_slug"),
         CheckConstraint("display_order >= 0", name="display_order_nonnegative"),
+        CheckConstraint("level BETWEEN 0 AND 1", name="level_supported"),
+        CheckConstraint(
+            "(level = 0 AND parent_id IS NULL) OR (level = 1 AND parent_id IS NOT NULL)",
+            name="level_matches_parent",
+        ),
+        CheckConstraint("parent_id IS NULL OR parent_id <> id", name="parent_not_self"),
     )
 
     parent_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("categories.id", ondelete="RESTRICT"), index=True
     )
     code: Mapped[str] = mapped_column(String(64))
+    slug: Mapped[str] = mapped_column(String(64))
     name: Mapped[str] = mapped_column(String(80))
+    level: Mapped[int] = mapped_column(default=0, server_default=text("0"))
     display_order: Mapped[int] = mapped_column(default=0, server_default=text("0"))
     is_active: Mapped[bool] = mapped_column(default=True, server_default=text("true"))
 

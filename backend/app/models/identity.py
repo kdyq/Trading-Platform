@@ -102,6 +102,7 @@ class Campus(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, VersionMixin,
     __table_args__ = (
         UniqueConstraint("school_id", "code", name="uq_campuses_school_code"),
         UniqueConstraint("school_id", "name", name="uq_campuses_school_name"),
+        CheckConstraint("display_order >= 0", name="display_order_nonnegative"),
     )
 
     school_id: Mapped[UUID] = mapped_column(
@@ -109,6 +110,7 @@ class Campus(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, VersionMixin,
     )
     code: Mapped[str] = mapped_column(String(32))
     name: Mapped[str] = mapped_column(String(120))
+    display_order: Mapped[int] = mapped_column(default=0, server_default=text("0"))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default=text("true"))
 
     school: Mapped[School] = relationship(back_populates="campuses")

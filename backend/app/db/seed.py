@@ -25,7 +25,13 @@ DEFAULT_CATEGORIES: Sequence[tuple[str, str]] = (
 async def seed_categories(connection: AsyncConnection) -> None:
     statement = insert(Category).values(
         [
-            {"code": code, "name": name, "display_order": position}
+            {
+                "code": code,
+                "slug": code,
+                "name": name,
+                "level": 0,
+                "display_order": position,
+            }
             for position, (code, name) in enumerate(DEFAULT_CATEGORIES)
         ]
     )
@@ -34,6 +40,8 @@ async def seed_categories(connection: AsyncConnection) -> None:
             index_elements=[Category.code],
             set_={
                 "name": statement.excluded.name,
+                "slug": statement.excluded.slug,
+                "level": statement.excluded.level,
                 "display_order": statement.excluded.display_order,
                 "is_active": True,
                 "deleted_at": None,

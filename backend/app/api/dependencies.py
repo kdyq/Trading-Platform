@@ -9,6 +9,7 @@ from app.core.exceptions import AppError
 from app.core.security import PasswordManager, TokenManager
 from app.db.session import get_database_session
 from app.repositories.campus import CampusRepository, SqlAlchemyCampusRepository
+from app.repositories.catalog import CatalogRepository, SqlAlchemyCatalogRepository
 from app.repositories.identity import (
     AccountRepository,
     IdentityRepository,
@@ -18,6 +19,7 @@ from app.repositories.market import MarketRepository, SqlAlchemyMarketRepository
 from app.services.account import AccountService
 from app.services.auth import AuthService
 from app.services.campus import CampusService
+from app.services.catalog import CatalogCache, CatalogService
 from app.services.email_verification import (
     RedisVerificationCodeStore,
     UnavailableVerificationCodeStore,
@@ -34,6 +36,8 @@ from app.services.mailer import (
 )
 from app.services.market import MarketService
 from app.services.private_storage import PrivateAppealStorage
+
+catalog_cache = CatalogCache()
 
 
 def get_settings_from_request(request: Request) -> Settings:
@@ -62,6 +66,12 @@ def get_market_repository(
     session: Annotated[AsyncSession, Depends(get_database_session)],
 ) -> MarketRepository:
     return SqlAlchemyMarketRepository(session)
+
+
+def get_catalog_repository(
+    session: Annotated[AsyncSession, Depends(get_database_session)],
+) -> CatalogRepository:
+    return SqlAlchemyCatalogRepository(session)
 
 
 @lru_cache
@@ -193,3 +203,9 @@ def get_market_service(
     repository: Annotated[MarketRepository, Depends(get_market_repository)],
 ) -> MarketService:
     return MarketService(repository)
+
+
+def get_catalog_service(
+    repository: Annotated[CatalogRepository, Depends(get_catalog_repository)],
+) -> CatalogService:
+    return CatalogService(repository, catalog_cache)

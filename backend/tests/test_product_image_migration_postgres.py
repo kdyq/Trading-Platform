@@ -78,7 +78,7 @@ async def _exercise_migration(database_url: str) -> None:
             replacement_seller_id,
         )
         await connection.execute(
-            "INSERT INTO categories (id, code, name) VALUES ($1, 'test', '测试分类')",
+            "INSERT INTO categories (id, code, slug, name) VALUES ($1, 'test', 'test', '测试分类')",
             category_id,
         )
         await connection.execute(
