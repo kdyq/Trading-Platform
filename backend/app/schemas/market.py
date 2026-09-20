@@ -64,6 +64,7 @@ class PublicProductListResponse(BaseModel):
     total: int = Field(ge=0)
     page: int = Field(ge=1)
     page_size: int = Field(ge=1)
+    next_cursor: str | None = None
 
 
 class PublicMarketSummaryResponse(BaseModel):

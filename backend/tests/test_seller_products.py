@@ -1,6 +1,9 @@
+from collections.abc import Callable
 from datetime import UTC, datetime
 from io import BytesIO
+from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 from uuid import UUID, uuid4
 
 import pytest
@@ -23,8 +26,8 @@ class FakeProductRepository:
         self.owner_id = owner_id
         self.campus_id = uuid4()
         self.category_id = uuid4()
-        self.products = {}
-        self.rollback_callbacks = []
+        self.products: dict[UUID, Any] = {}
+        self.rollback_callbacks: list[Callable[[], None]] = []
 
     async def verified_campus_id(self, user_id):  # type: ignore[no-untyped-def]
         return self.campus_id if user_id == self.owner_id else None
@@ -61,8 +64,8 @@ class FakeProductRepository:
 
 class FakeUploadRepository:
     def __init__(self) -> None:
-        self.uploads = {}
-        self.rollback_callbacks = []
+        self.uploads: dict[UUID, Any] = {}
+        self.rollback_callbacks: list[Callable[[], None]] = []
 
     async def count_temporary(self, owner_id):  # type: ignore[no-untyped-def]
         return 0
@@ -153,8 +156,9 @@ async def test_verified_owner_can_save_images_and_submit_complete_draft(tmp_path
     )
     assert saved.images[0].display_order == 0
     assert image_upload.status == ProductImageUploadStatus.CONFIRMED
-    assert len(list(tmp_path.glob("products/**/original.jpg"))) == 1
-    assert len(products.rollback_callbacks) == 1
+    assert storage.path_for(image_upload.original_key).is_file()
+    assert saved.images[0].url.endswith(f"/{saved.images[0].id}")
+    assert products.rollback_callbacks == []
 
     submitted = await service.submit(owner_id, draft.id, saved.version)
     assert submitted.status == "pending_review"
@@ -163,8 +167,8 @@ async def test_verified_owner_can_save_images_and_submit_complete_draft(tmp_path
 
 @pytest.mark.anyio
 async def test_incomplete_draft_cannot_submit_and_pending_draft_must_be_withdrawn(
-    tmp_path,
-) -> None:  # type: ignore[no-untyped-def]
+    tmp_path: Path,
+) -> None:
     owner_id = uuid4()
     products = FakeProductRepository(owner_id)
     service = SellerProductService(

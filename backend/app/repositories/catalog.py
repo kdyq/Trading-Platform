@@ -4,6 +4,7 @@ from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.core.exceptions import AppError
 from app.models.catalog import Category
@@ -62,13 +63,11 @@ class SqlAlchemyCatalogRepository:
     async def list_public_schools(self) -> Sequence[School]:
         result = await self.session.scalars(
             select(School)
+            .options(selectinload(School.campuses))
             .where(School.deleted_at.is_(None), School.is_active.is_(True))
             .order_by(School.name, School.id)
         )
-        schools = result.unique().all()
-        for school in schools:
-            await self.session.refresh(school, attribute_names=["campuses"])
-        return schools
+        return result.unique().all()
 
     async def list_all_categories(self) -> Sequence[Category]:
         result = await self.session.scalars(

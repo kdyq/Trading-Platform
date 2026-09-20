@@ -54,6 +54,9 @@ const isOwner = computed(() => auth.user?.id === product.value?.seller.id)
 const actionDisabled = computed(
   () => !product.value || isOwner.value || product.value.status !== 'on_sale',
 )
+const favoriteDisabled = computed(
+  () => !product.value || isOwner.value || product.value.status === 'sold',
+)
 const disabledReason = computed(() => {
   if (isOwner.value) return '这是你发布的商品'
   if (product.value?.status === 'sold') return '商品已售出'
@@ -88,7 +91,7 @@ function openGate(intent: 'action' | 'report' = 'action') {
 }
 
 async function toggleFavorite() {
-  if (actionDisabled.value || !product.value) return
+  if (favoriteDisabled.value || !product.value) return
   if (!auth.user) {
     gate.value = 'login'
     return
@@ -216,7 +219,7 @@ onUnmounted(() => {
           <div class="product-main-actions">
             <UiButton
               variant="secondary"
-              :disabled="actionDisabled || favoriteBusy"
+              :disabled="favoriteDisabled || favoriteBusy"
               @click="toggleFavorite"
             >
               {{ favorited ? '取消收藏' : '收藏' }} · {{ favoriteCount }}

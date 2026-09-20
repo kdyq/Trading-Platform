@@ -16,6 +16,8 @@ const categories = ref<PublicCategory[]>([])
 const campuses = ref<PublicCampus[]>([])
 const products = ref<PublicProduct[]>([])
 const total = ref(0)
+const nextCursor = ref<string | null>(null)
+const cursorHistory = new Map<string, string>()
 const loading = ref(false)
 const error = ref('')
 const filterOpen = ref(false)
@@ -35,6 +37,9 @@ let requestController: AbortController | undefined
 
 const page = computed(() => Math.max(1, Number(route.query.page) || 1))
 const pageCount = computed(() => Math.max(1, Math.ceil(total.value / 12)))
+const previousDisabled = computed(
+  () => page.value <= 1 || (page.value > 2 && !cursorHistory.has(historyKey(page.value - 1))),
+)
 const conditionLabels: Record<PublicProduct['condition'], string> = {
   new: '全新',
   like_new: '近新',
@@ -60,6 +65,10 @@ function cleanQuery() {
   return query
 }
 
+function historyKey(targetPage: number) {
+  return `${JSON.stringify(cleanQuery())}:${targetPage}`
+}
+
 async function applyFilters() {
   filterOpen.value = false
   await router.push({ path: '/market', query: cleanQuery() })
@@ -81,7 +90,23 @@ async function clearFilters() {
 }
 
 async function changePage(nextPage: number) {
-  await router.push({ path: '/market', query: { ...cleanQuery(), page: String(nextPage) } })
+  if (loading.value) return
+  if (nextPage < page.value) {
+    if (previousDisabled.value) return
+    const query: Record<string, string> = { ...cleanQuery() }
+    const previous = cursorHistory.get(historyKey(nextPage))
+    if (nextPage > 1 && previous) query.cursor = previous
+    query.page = String(nextPage)
+    await router.push({ path: '/market', query })
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+    return
+  }
+  if (!nextCursor.value) return
+  cursorHistory.set(historyKey(nextPage), nextCursor.value)
+  await router.push({
+    path: '/market',
+    query: { ...cleanQuery(), page: String(nextPage), cursor: nextCursor.value },
+  })
   window.scrollTo({ top: 0, behavior: 'smooth' })
 }
 
@@ -105,11 +130,16 @@ async function loadProducts() {
   error.value = ''
   try {
     const result = await searchProducts(
-      { ...cleanQuery(), page: String(page.value) },
+      {
+        ...cleanQuery(),
+        page: String(page.value),
+        cursor: firstQueryValue(route.query.cursor) || undefined,
+      },
       controller.signal,
     )
     products.value = result.items
     total.value = result.total
+    nextCursor.value = result.next_cursor
   } catch (caught) {
     if (controller.signal.aborted) return
     error.value = caught instanceof Error ? caught.message : '商品列表暂时无法加载'
@@ -245,11 +275,19 @@ onUnmounted(() => {
           <UiButton variant="secondary" @click="clearFilters">清空条件</UiButton>
         </div>
         <nav v-if="pageCount > 1" class="pagination" aria-label="商品分页">
-          <UiButton variant="secondary" :disabled="page <= 1" @click="changePage(page - 1)">
+          <UiButton
+            variant="secondary"
+            :disabled="loading || previousDisabled"
+            @click="changePage(page - 1)"
+          >
             上一页
           </UiButton>
           <span>第 {{ page }} / {{ pageCount }} 页</span>
-          <UiButton variant="secondary" :disabled="page >= pageCount" @click="changePage(page + 1)">
+          <UiButton
+            variant="secondary"
+            :disabled="loading || !nextCursor"
+            @click="changePage(page + 1)"
+          >
             下一页
           </UiButton>
         </nav>

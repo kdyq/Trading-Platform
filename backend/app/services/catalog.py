@@ -103,14 +103,14 @@ class CatalogService:
         return response
 
     async def admin_categories(self, user_id: UUID) -> list[AdminCategoryResponse]:
-        await self._require_admin(user_id)
+        await self._require_permission(user_id, "catalog:read")
         return [
             AdminCategoryResponse.model_validate(item, from_attributes=True)
             for item in await self.repository.list_all_categories()
         ]
 
     async def admin_campuses(self, user_id: UUID) -> list[AdminCampusResponse]:
-        await self._require_admin(user_id)
+        await self._require_permission(user_id, "catalog:read")
         return [
             AdminCampusResponse(
                 id=item.id,
@@ -129,7 +129,7 @@ class CatalogService:
     async def update_category(
         self, user_id: UUID, category_id: UUID, payload: CatalogItemUpdate
     ) -> AdminCategoryResponse:
-        await self._require_admin(user_id)
+        await self._require_permission(user_id, "catalog:write")
         item = await self.repository.update_category(
             category_id,
             version=payload.version,
@@ -142,7 +142,7 @@ class CatalogService:
     async def update_campus(
         self, user_id: UUID, campus_id: UUID, payload: CatalogItemUpdate
     ) -> AdminCampusResponse:
-        await self._require_admin(user_id)
+        await self._require_permission(user_id, "catalog:write")
         item = await self.repository.update_campus(
             campus_id,
             version=payload.version,
@@ -164,6 +164,6 @@ class CatalogService:
             version=item.version,
         )
 
-    async def _require_admin(self, user_id: UUID) -> None:
-        if not await self.repository.has_permission(user_id, "catalog:read"):
+    async def _require_permission(self, user_id: UUID, permission_code: str) -> None:
+        if not await self.repository.has_permission(user_id, permission_code):
             raise AppError(status_code=403, code="permission_denied", message="无权管理基础数据")

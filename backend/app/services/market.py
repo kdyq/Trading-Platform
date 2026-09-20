@@ -1,10 +1,16 @@
+import base64
+import json
+from datetime import datetime
+from decimal import Decimal
 from uuid import UUID
 
 from app.core.exceptions import AppError
 from app.repositories.market import (
     MarketRepository,
+    PublicProductCursor,
     PublicProductFilters,
     PublicProductImageRecord,
+    PublicProductRecord,
 )
 from app.schemas.market import (
     FavoriteStatusResponse,
@@ -54,10 +60,18 @@ class MarketService:
         return PublicMarketSummaryResponse.model_validate(counts, from_attributes=True)
 
     async def search(
-        self, *, filters: PublicProductFilters, page: int, page_size: int
+        self,
+        *,
+        filters: PublicProductFilters,
+        page: int,
+        page_size: int,
+        cursor: str | None = None,
     ) -> PublicProductListResponse:
+        decoded_cursor: PublicProductCursor | None = None
+        if cursor:
+            decoded_cursor = self._decode_cursor(cursor, filters.sort)
         records, total = await self.repository.search_products(
-            filters=filters, offset=(page - 1) * page_size, limit=page_size
+            filters=filters, cursor=decoded_cursor, limit=page_size
         )
         return PublicProductListResponse(
             items=[
@@ -67,7 +81,64 @@ class MarketService:
             total=total,
             page=page,
             page_size=page_size,
+            next_cursor=self._encode_cursor(records[-1], filters.sort)
+            if len(records) == page_size and page * page_size < total
+            else None,
         )
+
+    @staticmethod
+    def _encode_cursor(record: PublicProductRecord, sort: str) -> str:
+        values: dict[str, object] = {
+            "id": str(record.id),
+            "sort": sort,
+            "price": str(record.price) if sort.startswith("price_") else None,
+            "published_at": record.published_at.isoformat()
+            if sort == "newest" and record.published_at is not None
+            else None,
+            "created_at": record.created_at.isoformat() if sort == "newest" else None,
+        }
+        return MarketService._encode_cursor_values(values)
+
+    @staticmethod
+    def _decode_cursor(value: str, sort: str) -> PublicProductCursor:
+        try:
+            values = MarketService._cursor_values(value)
+            if values["sort"] != sort:
+                raise ValueError
+            product_id = values["id"]
+            price = values.get("price")
+            published_at = values.get("published_at")
+            created_at = values.get("created_at")
+            if not isinstance(product_id, str):
+                raise ValueError
+            if price is not None and not isinstance(price, str):
+                raise ValueError
+            if published_at is not None and not isinstance(published_at, str):
+                raise ValueError
+            if created_at is not None and not isinstance(created_at, str):
+                raise ValueError
+            return PublicProductCursor(
+                product_id=UUID(product_id),
+                price=Decimal(price) if price is not None else None,
+                published_at=datetime.fromisoformat(published_at)
+                if published_at is not None
+                else None,
+                created_at=datetime.fromisoformat(created_at) if created_at is not None else None,
+            )
+        except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
+            raise AppError(status_code=422, code="invalid_cursor", message="分页游标无效") from exc
+
+    @staticmethod
+    def _cursor_values(value: str) -> dict[str, object]:
+        padded = value + "=" * (-len(value) % 4)
+        decoded = json.loads(base64.urlsafe_b64decode(padded).decode())
+        if not isinstance(decoded, dict):
+            raise ValueError
+        return decoded
+
+    @staticmethod
+    def _encode_cursor_values(values: dict[str, object]) -> str:
+        return base64.urlsafe_b64encode(json.dumps(values).encode()).decode().rstrip("=")
 
     async def product_detail(self, product_id: UUID) -> PublicProductDetailResponse:
         record = await self.repository.get_product(product_id)

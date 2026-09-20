@@ -81,6 +81,20 @@ async def _exercise_migration(database_url: str) -> None:
             "INSERT INTO categories (id, code, slug, name) VALUES ($1, 'test', 'test', '测试分类')",
             category_id,
         )
+        child_category_id = uuid4()
+        await connection.execute(
+            "INSERT INTO categories (id, parent_id, code, slug, name, level) "
+            "VALUES ($1, $2, 'child', 'child', '子分类', 1)",
+            child_category_id,
+            category_id,
+        )
+        with pytest.raises(asyncpg.RaiseError, match="root category"):
+            await connection.execute(
+                "INSERT INTO categories (id, parent_id, code, slug, name, level) "
+                "VALUES ($1, $2, 'grandchild', 'grandchild', '三级分类', 1)",
+                uuid4(),
+                child_category_id,
+            )
         await connection.execute(
             "INSERT INTO products "
             "(id, seller_id, campus_id, category_id, title, description, price) "

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from decimal import Decimal
-from pathlib import Path
 from uuid import UUID, uuid4
 
 from app.core.exceptions import AppError
@@ -246,18 +245,12 @@ class SellerProductService:
         if upload.expires_at <= datetime.now(UTC):
             raise AppError(status_code=409, code="image_upload_expired", message="待处理图片已过期")
         image_id = uuid4()
-        extension = Path(upload.original_key).suffix
-        original_key = f"products/{product.id}/{image_id}/original{extension}"
-        thumbnail_key = f"products/{product.id}/{image_id}/thumbnail.webp"
-        self.storage.move(upload.original_key, original_key)
-        try:
-            self.storage.move(upload.thumbnail_key, thumbnail_key)
-        except BaseException:
-            self.storage.move(original_key, upload.original_key)
-            raise
-        self.repository.add_rollback_callback(
-            lambda: self._restore_upload(upload, original_key, thumbnail_key)
-        )
+        # The database status is the ownership boundary. Keeping random object keys
+        # unchanged makes confirmation atomic with the database commit: a crash before
+        # commit leaves a cleanable temporary upload, while a commit makes those same
+        # objects durable without a filesystem/object-store consistency gap.
+        original_key = upload.original_key
+        thumbnail_key = upload.thumbnail_key
         upload.status = ProductImageUploadStatus.CONFIRMED
         upload.confirmed_at = datetime.now(UTC)
         image = ProductImage(
@@ -270,12 +263,6 @@ class SellerProductService:
         )
         await self.repository.add_image(image)
         return image
-
-    def _restore_upload(
-        self, upload: ProductImageUpload, original_key: str, thumbnail_key: str
-    ) -> None:
-        self.storage.move(original_key, upload.original_key)
-        self.storage.move(thumbnail_key, upload.thumbnail_key)
 
     async def _validate_complete(self, owner_id: UUID, product: Product) -> None:
         if not 5 <= len(product.title.strip()) <= 120:

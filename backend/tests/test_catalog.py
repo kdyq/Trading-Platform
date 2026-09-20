@@ -76,7 +76,9 @@ class FakeCatalogRepository:
         return [(self.campus, self.school.name)]
 
     async def has_permission(self, user_id, permission_code):  # type: ignore[no-untyped-def]
-        return permission_code == "catalog:read" and user_id in self.allowed_users
+        return (
+            permission_code in {"catalog:read", "catalog:write"} and user_id in self.allowed_users
+        )
 
     async def update_category(  # type: ignore[no-untyped-def]
         self, category_id, *, version, display_order, is_active
@@ -84,7 +86,11 @@ class FakeCatalogRepository:
         if category_id != self.root.id:
             raise AssertionError("unexpected category")
         if version != self.root.version:
-            raise AppError(409, "catalog_version_conflict", "conflict")
+            raise AppError(
+                status_code=409,
+                code="catalog_version_conflict",
+                message="conflict",
+            )
         if display_order is not None:
             self.root.display_order = display_order
         if is_active is not None:

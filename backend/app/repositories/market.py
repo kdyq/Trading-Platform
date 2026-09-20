@@ -9,6 +9,7 @@ from sqlalchemy import ColumnElement, Select, delete, exists, func, or_, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.exceptions import AppError
 from app.models.catalog import (
     Category,
     Favorite,
@@ -36,6 +37,7 @@ class PublicProductRecord:
     price: Decimal
     status: str
     published_at: datetime | None
+    created_at: datetime
     campus_name: str
     school_name: str
     seller_name: str
@@ -79,6 +81,14 @@ class PublicProductFilters:
 
 
 @dataclass(frozen=True)
+class PublicProductCursor:
+    product_id: UUID
+    price: Decimal | None = None
+    published_at: datetime | None = None
+    created_at: datetime | None = None
+
+
+@dataclass(frozen=True)
 class PublicMarketCounts:
     available_products: int
     active_campuses: int
@@ -93,7 +103,11 @@ class MarketRepository(Protocol):
     async def list_campuses(self) -> Sequence[tuple[UUID, str, str]]: ...
 
     async def search_products(
-        self, *, filters: PublicProductFilters, offset: int, limit: int
+        self,
+        *,
+        filters: PublicProductFilters,
+        cursor: PublicProductCursor | None,
+        limit: int,
     ) -> tuple[Sequence[PublicProductRecord], int]: ...
 
     async def get_product(self, product_id: UUID) -> PublicProductDetailRecord | None: ...
@@ -156,6 +170,7 @@ class SqlAlchemyMarketRepository:
                 Product.price,
                 Product.status,
                 Product.published_at,
+                Product.created_at,
                 Campus.name.label("campus_name"),
                 School.name.label("school_name"),
                 User.display_name.label("seller_name"),
@@ -176,7 +191,9 @@ class SqlAlchemyMarketRepository:
                 Product.deleted_at.is_(None),
                 Product.status.in_(statuses or self.PUBLIC_STATUSES),
                 Campus.deleted_at.is_(None),
+                Campus.is_active.is_(True),
                 School.deleted_at.is_(None),
+                School.is_active.is_(True),
                 User.deleted_at.is_(None),
                 User.status == UserStatus.ACTIVE,
                 Category.deleted_at.is_(None),
@@ -221,7 +238,11 @@ class SqlAlchemyMarketRepository:
         return int(await self.session.scalar(select(func.count(base.c.id))) or 0)
 
     async def search_products(
-        self, *, filters: PublicProductFilters, offset: int, limit: int
+        self,
+        *,
+        filters: PublicProductFilters,
+        cursor: PublicProductCursor | None,
+        limit: int,
     ) -> tuple[Sequence[PublicProductRecord], int]:
         query = self._public_product_query(self.ALL_PUBLIC_STATUSES)
         if filters.status is None:
@@ -262,7 +283,44 @@ class SqlAlchemyMarketRepository:
                 Product.id,
             ),
         }[filters.sort]
-        result = await self.session.execute(query.order_by(*ordering).offset(offset).limit(limit))
+        if cursor is not None:
+            if filters.sort == "price_asc" and cursor.price is not None:
+                query = query.where(
+                    or_(
+                        Product.price > cursor.price,
+                        (Product.price == cursor.price) & (Product.id > cursor.product_id),
+                    )
+                )
+            elif filters.sort == "price_desc" and cursor.price is not None:
+                query = query.where(
+                    or_(
+                        Product.price < cursor.price,
+                        (Product.price == cursor.price) & (Product.id > cursor.product_id),
+                    )
+                )
+            elif cursor.created_at is not None:
+                if cursor.published_at is None:
+                    query = query.where(
+                        Product.published_at.is_(None),
+                        or_(
+                            Product.created_at < cursor.created_at,
+                            (Product.created_at == cursor.created_at)
+                            & (Product.id > cursor.product_id),
+                        ),
+                    )
+                else:
+                    query = query.where(
+                        or_(
+                            Product.published_at.is_(None),
+                            Product.published_at < cursor.published_at,
+                            (Product.published_at == cursor.published_at)
+                            & (Product.created_at < cursor.created_at),
+                            (Product.published_at == cursor.published_at)
+                            & (Product.created_at == cursor.created_at)
+                            & (Product.id > cursor.product_id),
+                        )
+                    )
+        result = await self.session.execute(query.order_by(*ordering).limit(limit))
         return [PublicProductRecord(**dict(row._mapping)) for row in result], count
 
     async def get_product(self, product_id: UUID) -> PublicProductDetailRecord | None:
@@ -389,11 +447,9 @@ class SqlAlchemyMarketRepository:
 
     async def add_favorite(self, user_id: UUID, product_id: UUID) -> bool:
         visible = await self.session.scalar(
-            select(Product.id).where(
-                Product.id == product_id,
-                Product.deleted_at.is_(None),
-                Product.status.in_(self.PUBLIC_STATUSES),
-            )
+            self._public_product_query()
+            .with_only_columns(Product.id)
+            .where(Product.id == product_id)
         )
         if visible is None:
             return False
@@ -414,6 +470,17 @@ class SqlAlchemyMarketRepository:
         )
 
     async def favorite_status(self, user_id: UUID, product_id: UUID) -> tuple[bool, int]:
+        visible = await self.session.scalar(
+            self._public_product_query(self.ALL_PUBLIC_STATUSES)
+            .with_only_columns(Product.id)
+            .where(Product.id == product_id)
+        )
+        if visible is None:
+            raise AppError(
+                status_code=404,
+                code="product_not_found",
+                message="商品不存在或不可见",
+            )
         is_favorite = (
             await self.session.scalar(
                 select(Favorite.id).where(

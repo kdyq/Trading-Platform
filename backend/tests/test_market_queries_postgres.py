@@ -7,10 +7,15 @@ import pytest
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
+from app.core.exceptions import AppError
 from app.db.seed import seed_categories
 from app.db.url import database_url_for_sqlalchemy, require_project_database
 from app.models import Base
-from app.repositories.market import PublicProductFilters, SqlAlchemyMarketRepository
+from app.repositories.market import (
+    PublicProductCursor,
+    PublicProductFilters,
+    SqlAlchemyMarketRepository,
+)
 
 
 def test_public_market_queries_keep_status_and_seller_trust_boundaries() -> None:
@@ -214,17 +219,93 @@ async def _exercise_market_queries(database_url: str) -> None:
             assert await repository.get_product(hidden_id) is None
 
             items, total = await repository.search_products(
-                filters=PublicProductFilters(), offset=0, limit=12
+                filters=PublicProductFilters(), cursor=None, limit=12
             )
             assert total == 2
             assert all(item.favorite_count == 0 for item in items)
             verification_by_id = {item.id: item.seller_verified for item in items}
             assert verification_by_id == {product_id: True, similar_id: False}
 
+            first_page, _ = await repository.search_products(
+                filters=PublicProductFilters(sort="price_asc"), cursor=None, limit=1
+            )
+            inserted_id = uuid4()
+            await session.execute(
+                product_statement,
+                {
+                    "id": inserted_id,
+                    "seller": seller_id,
+                    "campus": campus_id,
+                    "category": category_id,
+                    "title": "翻页间新增商品",
+                    "description": "用于验证游标分页稳定性",
+                    "status": "on_sale",
+                },
+            )
+            await session.execute(
+                text("UPDATE products SET price = 1 WHERE id = :id"), {"id": inserted_id}
+            )
+            second_page, _ = await repository.search_products(
+                filters=PublicProductFilters(sort="price_asc"),
+                cursor=PublicProductCursor(
+                    product_id=first_page[0].id,
+                    price=first_page[0].price,
+                ),
+                limit=1,
+            )
+            assert second_page[0].id in {product_id, similar_id} - {first_page[0].id}
+
+            null_published_id = uuid4()
+            await session.execute(
+                product_statement,
+                {
+                    "id": null_published_id,
+                    "seller": seller_id,
+                    "campus": campus_id,
+                    "category": category_id,
+                    "title": "空发布时间商品",
+                    "description": "用于验证空值游标分区",
+                    "status": "on_sale",
+                },
+            )
+            await session.execute(
+                text("UPDATE products SET published_at = NULL WHERE id IN (:first, :second)"),
+                {"first": similar_id, "second": null_published_id},
+            )
+            newest_page, _ = await repository.search_products(
+                filters=PublicProductFilters(sort="newest"), cursor=None, limit=2
+            )
+            assert all(item.published_at is not None for item in newest_page)
+            first_null_page, _ = await repository.search_products(
+                filters=PublicProductFilters(sort="newest"),
+                cursor=PublicProductCursor(
+                    product_id=newest_page[-1].id,
+                    published_at=newest_page[-1].published_at,
+                    created_at=newest_page[-1].created_at,
+                ),
+                limit=1,
+            )
+            assert first_null_page[0].published_at is None
+            second_null_page, _ = await repository.search_products(
+                filters=PublicProductFilters(sort="newest"),
+                cursor=PublicProductCursor(
+                    product_id=first_null_page[0].id,
+                    published_at=None,
+                    created_at=first_null_page[0].created_at,
+                ),
+                limit=1,
+            )
+            assert second_null_page[0].published_at is None
+            assert second_null_page[0].id != first_null_page[0].id
+
             similar = await repository.list_similar_products(
                 product_id=product_id, category_id=detail.category_id, limit=4
             )
-            assert [item.id for item in similar] == [similar_id]
+            assert {item.id for item in similar} == {
+                inserted_id,
+                null_published_id,
+                similar_id,
+            }
 
             assert await repository.add_favorite(buyer_id, product_id) is True
             assert await repository.add_favorite(buyer_id, product_id) is True
@@ -233,6 +314,24 @@ async def _exercise_market_queries(database_url: str) -> None:
             assert [item.id for item in favorites] == [product_id]
             await repository.remove_favorite(buyer_id, product_id)
             assert await repository.favorite_status(buyer_id, product_id) == (False, 0)
+
+            await session.execute(
+                text("UPDATE campuses SET is_active = false WHERE id = :id"),
+                {"id": campus_id},
+            )
+            assert await repository.get_product(product_id) is None
+            hidden_items, hidden_total = await repository.search_products(
+                filters=PublicProductFilters(), cursor=None, limit=12
+            )
+            assert hidden_items == [] and hidden_total == 0
+            assert await repository.add_favorite(buyer_id, product_id) is False
+            with pytest.raises(AppError) as hidden_status:
+                await repository.favorite_status(buyer_id, product_id)
+            assert getattr(hidden_status.value, "code", None) == "product_not_found"
+            await session.execute(
+                text("UPDATE campuses SET is_active = true WHERE id = :id"),
+                {"id": campus_id},
+            )
 
             plan = await session.execute(
                 text(

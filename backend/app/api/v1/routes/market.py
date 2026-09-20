@@ -53,6 +53,7 @@ async def products(
     sort: Literal["newest", "price_asc", "price_desc"] = "newest",
     page: Annotated[int, Query(ge=1)] = 1,
     page_size: Annotated[int, Query(ge=1, le=24)] = 12,
+    cursor: Annotated[str | None, Query(min_length=1, max_length=1000)] = None,
 ) -> PublicProductListResponse:
     if limit is not None:
         return await service.latest_products(limit=limit)
@@ -62,6 +63,8 @@ async def products(
             code="invalid_price_range",
             message="最低价不能高于最高价",
         )
+    if page > 1 and cursor is None:
+        raise AppError(status_code=422, code="cursor_required", message="后续分页需要游标")
     return await service.search(
         filters=PublicProductFilters(
             keyword=keyword,
@@ -76,6 +79,7 @@ async def products(
         ),
         page=page,
         page_size=page_size,
+        cursor=cursor,
     )
 
 

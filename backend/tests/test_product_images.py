@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from io import BytesIO
 from types import SimpleNamespace
@@ -23,7 +24,7 @@ def image_bytes(image_format: str = "JPEG", *, size: tuple[int, int] = (64, 48))
 class FakeUploadRepository:
     def __init__(self) -> None:
         self.uploads: dict[UUID, SimpleNamespace] = {}
-        self.rollback_callbacks = []
+        self.rollback_callbacks: list[Callable[[], None]] = []
 
     async def count_temporary(self, owner_id):  # type: ignore[no-untyped-def]
         return sum(
@@ -144,7 +145,7 @@ def test_storage_adapters_reject_traversal_and_s3_move_is_copy_then_delete(tmp_p
 
     class Client:
         def __init__(self) -> None:
-            self.calls = []
+            self.calls: list[tuple[str, dict[str, object]]] = []
 
         def put_object(self, **kwargs):  # type: ignore[no-untyped-def]
             self.calls.append(("put", kwargs))

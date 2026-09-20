@@ -43,6 +43,7 @@ export interface ProductSearchParams {
   status?: string
   sort?: string
   page?: string
+  cursor?: string
 }
 
 export interface PublicProductList {
@@ -50,6 +51,7 @@ export interface PublicProductList {
   total: number
   page: number
   page_size: number
+  next_cursor: string | null
 }
 
 export interface PublicSellerTrust {

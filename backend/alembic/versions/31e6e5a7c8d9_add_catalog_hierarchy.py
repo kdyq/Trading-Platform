@@ -21,6 +21,7 @@ def upgrade() -> None:
         sa.Column("level", sa.Integer(), server_default=sa.text("0"), nullable=False),
     )
     op.execute(sa.text("UPDATE categories SET slug = code WHERE slug IS NULL"))
+    op.execute(sa.text("UPDATE categories SET level = 1 WHERE parent_id IS NOT NULL"))
     op.alter_column("categories", "slug", nullable=False)
     op.create_unique_constraint(op.f("uq_categories_slug"), "categories", ["slug"])
     op.create_check_constraint(

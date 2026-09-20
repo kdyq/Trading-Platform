@@ -41,6 +41,7 @@ class FakeMarketRepository:
                 price=Decimal("18.50"),
                 status="on_sale",
                 published_at=datetime(2026, 9, 14, tzinfo=UTC),
+                created_at=datetime(2026, 9, 14, tzinfo=UTC),
                 campus_name="东校区",
                 school_name="测试学校",
                 seller_name="小林",
@@ -58,8 +59,8 @@ class FakeMarketRepository:
     async def list_campuses(self):  # type: ignore[no-untyped-def]
         return [(uuid4(), "东校区", "测试学校")]
 
-    async def search_products(self, *, filters, offset, limit):  # type: ignore[no-untyped-def]
-        assert offset == 0
+    async def search_products(self, *, filters, cursor, limit):  # type: ignore[no-untyped-def]
+        assert cursor is None
         assert limit == 12
         records = await self.list_latest_products(limit=4)
         return records, 1
@@ -235,6 +236,18 @@ def test_public_market_product_limit_is_bounded() -> None:
         response = client.get("/api/v1/market/products?limit=25")
     assert response.status_code == 422
     assert response.json()["code"] == "validation_error"
+
+
+@pytest.mark.anyio
+async def test_market_cursor_stays_fixed_length_across_many_pages() -> None:
+    repository = FakeMarketRepository()
+    record = (await repository.list_latest_products(limit=4))[0]
+    service = MarketService(repository)
+
+    cursors = [service._encode_cursor(record, "newest") for _ in range(10)]
+
+    assert all(len(cursor) < 1000 for cursor in cursors)
+    assert len({len(cursor) for cursor in cursors}) == 1
 
 
 def test_public_market_search_accepts_url_filters() -> None:
