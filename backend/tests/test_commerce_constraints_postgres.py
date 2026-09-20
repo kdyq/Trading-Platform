@@ -97,8 +97,10 @@ async def _exercise_commerce_constraints(database_url: str) -> None:
             )
             await connection.execute(
                 text(
-                    "INSERT INTO conversations (id, product_id, buyer_id, seller_id) "
-                    "VALUES (:id, :product, :buyer, :seller)"
+                    "INSERT INTO conversations "
+                    "(id, product_id, buyer_id, seller_id, product_title_snapshot, "
+                    "product_price_snapshot) "
+                    "VALUES (:id, :product, :buyer, :seller, '测试商品', 12.34)"
                 ),
                 {
                     "id": conversation_id,

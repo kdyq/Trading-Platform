@@ -1,0 +1,137 @@
+import asyncio
+import os
+from uuid import uuid4
+
+import pytest
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+from app.db.url import database_url_for_sqlalchemy, require_project_database
+from app.models import Base
+from app.models.messaging import Conversation
+from app.repositories.chat import SqlAlchemyChatRepository
+
+
+def test_chat_repository_enforces_unique_conversations_and_message_state() -> None:
+    database_url = os.getenv("DATABASE_URL")
+    if database_url is None:
+        pytest.skip("DATABASE_URL is required for PostgreSQL integration tests")
+    require_project_database(database_url)
+    asyncio.run(_exercise_chat_repository(database_url_for_sqlalchemy(database_url)))
+
+
+async def _exercise_chat_repository(database_url: str) -> None:
+    schema = f"test_chat_{uuid4().hex}"
+    admin_engine = create_async_engine(database_url)
+    async with admin_engine.begin() as connection:
+        await connection.execute(text(f'CREATE SCHEMA "{schema}"'))
+    engine = create_async_engine(
+        database_url,
+        connect_args={"server_settings": {"timezone": "UTC", "search_path": schema}},
+    )
+    seller_id, buyer_id, outsider_id = uuid4(), uuid4(), uuid4()
+    school_id, campus_id, category_id, product_id = uuid4(), uuid4(), uuid4(), uuid4()
+    try:
+        async with engine.begin() as connection:
+            await connection.run_sync(Base.metadata.create_all)
+            await connection.execute(
+                text("INSERT INTO schools (id, code, name) VALUES (:id, 'CHAT', '聊天测试学校')"),
+                {"id": school_id},
+            )
+            await connection.execute(
+                text(
+                    "INSERT INTO campuses (id, school_id, code, name) "
+                    "VALUES (:id, :school, 'MAIN', '主校区')"
+                ),
+                {"id": campus_id, "school": school_id},
+            )
+            await connection.execute(
+                text(
+                    "INSERT INTO categories (id, code, slug, name) "
+                    "VALUES (:id, 'chat', 'chat', '聊天测试')"
+                ),
+                {"id": category_id},
+            )
+            for user_id, email, name in (
+                (seller_id, "chat-seller@example.com", "卖家"),
+                (buyer_id, "chat-buyer@example.com", "买家"),
+                (outsider_id, "chat-outsider@example.com", "路人"),
+            ):
+                await connection.execute(
+                    text(
+                        "INSERT INTO users "
+                        "(id, login_email, password_hash, display_name, login_email_verified_at, "
+                        "user_agreement_version, privacy_policy_version, terms_agreed_at) "
+                        "VALUES (:id, :email, 'hash', :name, now(), 'test', 'test', now())"
+                    ),
+                    {"id": user_id, "email": email, "name": name},
+                )
+            await connection.execute(
+                text(
+                    "INSERT INTO products "
+                    "(id, seller_id, campus_id, category_id, title, description, price, status, "
+                    "published_at) VALUES "
+                    "(:id, :seller, :campus, :category, '聊天商品', '用于聊天测试', 9.90, "
+                    "'on_sale', now())"
+                ),
+                {
+                    "id": product_id,
+                    "seller": seller_id,
+                    "campus": campus_id,
+                    "category": category_id,
+                },
+            )
+
+        factory = async_sessionmaker(engine, expire_on_commit=False)
+
+        async def create_conversation() -> Conversation:
+            async with factory.begin() as session:
+                repository = SqlAlchemyChatRepository(session)
+                product = await repository.visible_product_for_chat(product_id)
+                assert product is not None
+                return await repository.create_or_get_conversation(
+                    product=product, buyer_id=buyer_id
+                )
+
+        first, second = await asyncio.gather(create_conversation(), create_conversation())
+        assert first.id == second.id
+
+        async with factory.begin() as session:
+            repository = SqlAlchemyChatRepository(session)
+            conversation = await repository.get_member_conversation(buyer_id, first.id)
+            assert conversation is not None
+            assert await repository.get_member_conversation(outsider_id, first.id) is None
+            sent = []
+            for index in range(3):
+                sent.append(
+                    await repository.create_message(
+                        conversation_id=first.id,
+                        sender_id=seller_id,
+                        client_message_id=f"postgres_{index}",
+                        body=f"消息 {index}",
+                    )
+                )
+            duplicate = await repository.create_message(
+                conversation_id=first.id,
+                sender_id=seller_id,
+                client_message_id="postgres_0",
+                body="消息 0",
+            )
+            assert duplicate.id == sent[0].id
+            summaries = await repository.list_conversations(buyer_id, 20)
+            assert summaries[0].unread_count == 3
+            latest_message = max(sent, key=lambda item: (item.created_at, item.id))
+            await repository.mark_read(
+                conversation_id=first.id, user_id=buyer_id, message=latest_message
+            )
+            assert (await repository.list_conversations(buyer_id, 20))[0].unread_count == 0
+            latest = await repository.list_messages(
+                first.id, before_created_at=None, before_id=None, limit=2
+            )
+            expected = sorted(sent, key=lambda item: (item.created_at, item.id))[-2:]
+            assert [item.id for item in latest] == [item.id for item in expected]
+    finally:
+        await engine.dispose()
+        async with admin_engine.begin() as connection:
+            await connection.execute(text(f'DROP SCHEMA IF EXISTS "{schema}" CASCADE'))
+        await admin_engine.dispose()

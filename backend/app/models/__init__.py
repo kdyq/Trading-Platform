@@ -27,7 +27,7 @@ from app.models.identity import (
     role_permissions,
     user_roles,
 )
-from app.models.messaging import Conversation, Message
+from app.models.messaging import Conversation, ConversationReadState, Message
 from app.models.moderation import (
     AuditLog,
     ModerationAction,
@@ -48,6 +48,7 @@ __all__ = [
     "CampusVerificationStatus",
     "Category",
     "Conversation",
+    "ConversationReadState",
     "CreditEventType",
     "CreditLedger",
     "Favorite",

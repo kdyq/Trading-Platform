@@ -10,6 +10,7 @@ from app.core.security import PasswordManager, TokenManager
 from app.db.session import get_database_session
 from app.repositories.campus import CampusRepository, SqlAlchemyCampusRepository
 from app.repositories.catalog import CatalogRepository, SqlAlchemyCatalogRepository
+from app.repositories.chat import ChatRepository, SqlAlchemyChatRepository
 from app.repositories.identity import (
     AccountRepository,
     IdentityRepository,
@@ -28,6 +29,7 @@ from app.services.account import AccountService
 from app.services.auth import AuthService
 from app.services.campus import CampusService
 from app.services.catalog import CatalogCache, CatalogService
+from app.services.chat import ChatService
 from app.services.email_verification import (
     RedisVerificationCodeStore,
     UnavailableVerificationCodeStore,
@@ -83,6 +85,12 @@ def get_catalog_repository(
     session: Annotated[AsyncSession, Depends(get_database_session)],
 ) -> CatalogRepository:
     return SqlAlchemyCatalogRepository(session)
+
+
+def get_chat_repository(
+    session: Annotated[AsyncSession, Depends(get_database_session)],
+) -> ChatRepository:
+    return SqlAlchemyChatRepository(session)
 
 
 def get_product_image_upload_repository(
@@ -232,6 +240,12 @@ def get_catalog_service(
     repository: Annotated[CatalogRepository, Depends(get_catalog_repository)],
 ) -> CatalogService:
     return CatalogService(repository, catalog_cache)
+
+
+def get_chat_service(
+    repository: Annotated[ChatRepository, Depends(get_chat_repository)],
+) -> ChatService:
+    return ChatService(repository)
 
 
 def get_product_image_upload_service(
