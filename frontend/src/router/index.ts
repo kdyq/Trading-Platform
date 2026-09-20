@@ -57,6 +57,11 @@ const router = createRouter({
           component: () => import('../views/FavoritesView.vue'),
         },
         {
+          path: 'messages/:id?',
+          name: 'messages',
+          component: () => import('../views/ChatView.vue'),
+        },
+        {
           path: 'orders',
           name: 'orders',
           component: () => import('../views/AccountCollectionView.vue'),

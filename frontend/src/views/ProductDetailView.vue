@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, onUnmounted, ref, watch } from 'vue'
-import { RouterLink, useRoute } from 'vue-router'
+import { RouterLink, useRoute, useRouter } from 'vue-router'
 
+import { createConversation } from '../api/chat'
 import { ApiError } from '../api/client'
 import { addFavorite, getFavoriteStatus, getProductDetail, removeFavorite } from '../api/market'
 import type { PublicProductDetail } from '../api/market'
@@ -13,6 +14,7 @@ import UiDialog from '../components/ui/UiDialog.vue'
 import { useAuthStore } from '../stores/auth'
 
 const route = useRoute()
+const router = useRouter()
 const auth = useAuthStore()
 const product = ref<PublicProductDetail | null>(null)
 const loading = ref(true)
@@ -21,6 +23,7 @@ const error = ref('')
 const favorited = ref(false)
 const favoriteCount = ref(0)
 const favoriteBusy = ref(false)
+const contactBusy = ref(false)
 const gate = ref<'login' | 'verification' | 'later' | null>(null)
 const gateIntent = ref<'action' | 'report'>('action')
 let controller: AbortController | undefined
@@ -88,6 +91,28 @@ function openGate(intent: 'action' | 'report' = 'action') {
   else if (intent === 'action' && auth.user.campus_verification_status !== 'verified')
     gate.value = 'verification'
   else gate.value = 'later'
+}
+
+async function contactSeller() {
+  if (actionDisabled.value || !product.value) return
+  if (!auth.user) {
+    gate.value = 'login'
+    return
+  }
+  if (auth.user.campus_verification_status !== 'verified') {
+    gate.value = 'verification'
+    return
+  }
+  if (!auth.accessToken || contactBusy.value) return
+  contactBusy.value = true
+  try {
+    const conversation = await createConversation(auth.accessToken, product.value.id)
+    await router.push(`/messages/${conversation.id}`)
+  } catch (caught) {
+    error.value = caught instanceof Error ? caught.message : '暂时无法联系卖家'
+  } finally {
+    contactBusy.value = false
+  }
 }
 
 async function toggleFavorite() {
@@ -224,8 +249,8 @@ onUnmounted(() => {
             >
               {{ favorited ? '取消收藏' : '收藏' }} · {{ favoriteCount }}
             </UiButton>
-            <UiButton :disabled="actionDisabled" @click="openGate()">
-              联系卖家 / 发起交易
+            <UiButton :disabled="actionDisabled || contactBusy" @click="contactSeller">
+              {{ contactBusy ? '正在建立会话…' : '联系卖家 / 发起交易' }}
             </UiButton>
           </div>
           <p v-if="disabledReason" class="action-disabled-reason">{{ disabledReason }}</p>
