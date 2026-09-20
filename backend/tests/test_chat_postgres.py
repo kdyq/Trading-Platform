@@ -117,10 +117,11 @@ async def _exercise_chat_repository(database_url: str) -> None:
                 client_message_id="postgres_0",
                 body="消息 0",
             )
-            assert duplicate.id == sent[0].id
+            assert duplicate.message.id == sent[0].message.id
             summaries = await repository.list_conversations(buyer_id, 20)
             assert summaries[0].unread_count == 3
-            latest_message = max(sent, key=lambda item: (item.created_at, item.id))
+            messages = [item.message for item in sent]
+            latest_message = max(messages, key=lambda item: (item.created_at, item.id))
             await repository.mark_read(
                 conversation_id=first.id, user_id=buyer_id, message=latest_message
             )
@@ -128,7 +129,7 @@ async def _exercise_chat_repository(database_url: str) -> None:
             latest = await repository.list_messages(
                 first.id, before_created_at=None, before_id=None, limit=2
             )
-            expected = sorted(sent, key=lambda item: (item.created_at, item.id))[-2:]
+            expected = sorted(messages, key=lambda item: (item.created_at, item.id))[-2:]
             assert [item.id for item in latest] == [item.id for item in expected]
     finally:
         await engine.dispose()

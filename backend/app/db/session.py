@@ -1,4 +1,6 @@
-from collections.abc import AsyncIterator, Callable
+import inspect
+import logging
+from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from typing import cast
 
@@ -15,6 +17,9 @@ from app.db.url import (
     require_project_database,
     require_test_schema,
 )
+
+logger = logging.getLogger(__name__)
+AfterCommitCallback = Callable[[], Awaitable[None] | None]
 
 
 def create_database_engine(database_url: str, *, schema: str | None = None) -> AsyncEngine:
@@ -52,6 +57,17 @@ async def transaction_scope(
             raise
         else:
             session.info.pop("rollback_callbacks", None)
+            after_callbacks = cast(
+                list[AfterCommitCallback],
+                session.info.pop("after_commit_callbacks", []),
+            )
+            for after_callback in after_callbacks:
+                try:
+                    result = after_callback()
+                    if inspect.isawaitable(result):
+                        await result
+                except Exception:
+                    logger.exception("after-commit callback failed")
 
 
 async def session_scope(

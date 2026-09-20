@@ -1,4 +1,4 @@
-from collections.abc import Sequence
+from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -27,6 +27,12 @@ class ConversationRecord:
     last_message_at: datetime | None
     last_message_preview: str | None
     unread_count: int
+
+
+@dataclass(frozen=True)
+class MessageWriteResult:
+    message: Message
+    created: bool
 
 
 class ChatRepository(Protocol):
@@ -66,7 +72,9 @@ class ChatRepository(Protocol):
         sender_id: UUID,
         client_message_id: str,
         body: str,
-    ) -> Message: ...
+    ) -> MessageWriteResult: ...
+
+    def after_commit(self, callback: Callable[[], Awaitable[None] | None]) -> None: ...
 
     async def mark_read(
         self, *, conversation_id: UUID, user_id: UUID, message: Message
@@ -272,7 +280,7 @@ class SqlAlchemyChatRepository:
         sender_id: UUID,
         client_message_id: str,
         body: str,
-    ) -> Message:
+    ) -> MessageWriteResult:
         message_id = uuid4()
         inserted_id = await self.session.scalar(
             insert(Message)
@@ -293,7 +301,14 @@ class SqlAlchemyChatRepository:
             assert conversation is not None
             conversation.last_message_at = message.created_at
             await self.session.flush()
-        return message
+        return MessageWriteResult(message=message, created=inserted_id is not None)
+
+    def after_commit(self, callback: Callable[[], Awaitable[None] | None]) -> None:
+        callbacks = cast(
+            list[Callable[[], Awaitable[None] | None]],
+            self.session.info.setdefault("after_commit_callbacks", []),
+        )
+        callbacks.append(callback)
 
     async def mark_read(
         self, *, conversation_id: UUID, user_id: UUID, message: Message

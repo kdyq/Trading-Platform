@@ -48,6 +48,14 @@ from app.services.market import MarketService
 from app.services.private_storage import PrivateAppealStorage
 from app.services.product_images import ProductImageProcessor, ProductImageUploadService
 from app.services.product_storage import LocalObjectStorage
+from app.services.realtime import (
+    ChatMessageLimiter,
+    RealtimeHub,
+    RealtimePublisher,
+    RedisWebSocketTicketStore,
+    UnavailableWebSocketTicketStore,
+    WebSocketTicketStore,
+)
 from app.services.seller_products import SellerProductService
 
 catalog_cache = CatalogCache()
@@ -242,10 +250,30 @@ def get_catalog_service(
     return CatalogService(repository, catalog_cache)
 
 
+def get_realtime_publisher(request: Request) -> RealtimePublisher:
+    return cast(RealtimePublisher, request.app.state.realtime_publisher)
+
+
+def get_realtime_hub(request: Request) -> RealtimeHub:
+    return cast(RealtimeHub, request.app.state.realtime_hub)
+
+
+def get_chat_message_limiter(request: Request) -> ChatMessageLimiter:
+    return cast(ChatMessageLimiter, request.app.state.chat_message_limiter)
+
+
+def get_websocket_ticket_store(request: Request) -> WebSocketTicketStore:
+    if request.app.state.redis is None:
+        return UnavailableWebSocketTicketStore()
+    return RedisWebSocketTicketStore(request.app.state.redis)
+
+
 def get_chat_service(
     repository: Annotated[ChatRepository, Depends(get_chat_repository)],
+    publisher: Annotated[RealtimePublisher, Depends(get_realtime_publisher)],
+    limiter: Annotated[ChatMessageLimiter, Depends(get_chat_message_limiter)],
 ) -> ChatService:
-    return ChatService(repository)
+    return ChatService(repository, publisher, limiter)
 
 
 def get_product_image_upload_service(

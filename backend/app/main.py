@@ -1,5 +1,6 @@
+import asyncio
 from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -12,6 +13,12 @@ from app.core.exceptions import register_exception_handlers
 from app.core.logging import configure_logging
 from app.core.middleware import RequestContextMiddleware
 from app.db.session import create_database_engine, create_session_factory
+from app.services.realtime import (
+    InMemoryChatMessageLimiter,
+    RealtimeHub,
+    RedisChatMessageLimiter,
+    RedisRealtimePublisher,
+)
 
 
 @asynccontextmanager
@@ -28,10 +35,24 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.redis = (
         Redis.from_url(settings.redis_url, decode_responses=True) if settings.redis_url else None
     )
+    app.state.realtime_hub = RealtimeHub()
+    app.state.realtime_publisher = RedisRealtimePublisher(app.state.realtime_hub, app.state.redis)
+    app.state.chat_message_limiter = RedisChatMessageLimiter(
+        app.state.redis, InMemoryChatMessageLimiter()
+    )
+    listener_task = (
+        asyncio.create_task(app.state.realtime_publisher.listen())
+        if app.state.redis is not None
+        else None
+    )
     yield
 
     engine: AsyncEngine | None = app.state.database_engine
     redis: Redis | None = app.state.redis
+    if listener_task is not None:
+        listener_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await listener_task
     app.state.session_factory = None
     if engine is not None:
         await engine.dispose()

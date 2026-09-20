@@ -53,3 +53,8 @@ class ReadPositionResponse(BaseModel):
     conversation_id: UUID
     last_read_message_id: UUID
     last_read_at: datetime
+
+
+class WebSocketTicketResponse(BaseModel):
+    ticket: str
+    expires_in: int = Field(gt=0)

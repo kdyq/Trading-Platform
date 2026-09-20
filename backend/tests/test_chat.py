@@ -9,7 +9,7 @@ import pytest
 from app.core.exceptions import AppError
 from app.models.catalog import ProductStatus
 from app.models.messaging import Message
-from app.repositories.chat import ConversationRecord
+from app.repositories.chat import ConversationRecord, MessageWriteResult
 from app.services.chat import ChatService
 
 
@@ -34,6 +34,7 @@ class FakeChatRepository:
         )
         self.messages: list[Message] = []
         self.read_states: dict[UUID, Any] = {}
+        self.after_commit_callbacks: list[Any] = []
 
     async def visible_product_for_chat(self, product_id):  # type: ignore[no-untyped-def]
         return self.product if product_id == self.product_id else None
@@ -109,11 +110,14 @@ class FakeChatRepository:
             values["sender_id"], values["client_message_id"]
         )
         if existing:
-            return existing
+            return MessageWriteResult(message=existing, created=False)
         message = Message(id=uuid4(), **values)
         message.created_at = datetime.now(UTC) + timedelta(microseconds=len(self.messages))
         self.messages.append(message)
-        return message
+        return MessageWriteResult(message=message, created=True)
+
+    def after_commit(self, callback):  # type: ignore[no-untyped-def]
+        self.after_commit_callbacks.append(callback)
 
     async def mark_read(self, *, conversation_id, user_id, message):  # type: ignore[no-untyped-def]
         state = SimpleNamespace(

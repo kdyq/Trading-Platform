@@ -1,9 +1,10 @@
-from typing import Annotated
+import asyncio
+from typing import Annotated, cast
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, WebSocket, WebSocketDisconnect
 
-from app.api.dependencies import get_chat_service
+from app.api.dependencies import get_chat_service, get_websocket_ticket_store
 from app.api.v1.routes.auth import get_auth_context
 from app.models.identity import CampusVerificationStatus
 from app.schemas.chat import (
@@ -15,15 +16,67 @@ from app.schemas.chat import (
     MessageSend,
     ReadPositionResponse,
     ReadPositionUpdate,
+    WebSocketTicketResponse,
 )
 from app.services.auth import AuthContext
 from app.services.chat import ChatService
+from app.services.realtime import (
+    RealtimeHub,
+    RedisWebSocketTicketStore,
+    WebSocketTicketStore,
+)
 
 router = APIRouter()
 
 
 def verified(context: AuthContext) -> bool:
     return context.campus_verification_status == CampusVerificationStatus.VERIFIED
+
+
+@router.post("/ws-tickets", response_model=WebSocketTicketResponse, status_code=201)
+async def websocket_ticket(
+    context: Annotated[AuthContext, Depends(get_auth_context)],
+    store: Annotated[WebSocketTicketStore, Depends(get_websocket_ticket_store)],
+) -> WebSocketTicketResponse:
+    ticket, expires_in = await store.issue(context.user.id)
+    return WebSocketTicketResponse(ticket=ticket, expires_in=expires_in)
+
+
+@router.websocket("/ws")
+async def websocket_endpoint(
+    websocket: WebSocket, ticket: str = Query(min_length=16, max_length=128)
+) -> None:
+    redis = websocket.app.state.redis
+    if redis is None:
+        await websocket.accept()
+        await websocket.close(code=1013, reason="realtime unavailable")
+        return
+    try:
+        user_id = await RedisWebSocketTicketStore(redis).consume(ticket)
+    except Exception:
+        await websocket.accept()
+        await websocket.close(code=1013, reason="realtime unavailable")
+        return
+    if user_id is None:
+        await websocket.accept()
+        await websocket.close(code=4401, reason="invalid ticket")
+        return
+    hub = cast(RealtimeHub, websocket.app.state.realtime_hub)
+    await hub.connect(user_id, websocket)
+    await websocket.send_json({"type": "chat.ready", "data": {"user_id": str(user_id)}})
+    try:
+        while True:
+            message = await asyncio.wait_for(websocket.receive_json(), timeout=45)
+            if isinstance(message, dict) and message.get("type") == "ping":
+                await websocket.send_json({"type": "pong"})
+            else:
+                await websocket.send_json({"type": "error", "data": {"code": "unsupported_event"}})
+    except TimeoutError:
+        await websocket.close(code=4408, reason="heartbeat timeout")
+    except WebSocketDisconnect:
+        pass
+    finally:
+        await hub.disconnect(user_id, websocket)
 
 
 @router.post("/conversations", response_model=ConversationSummary, status_code=201)

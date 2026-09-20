@@ -14,11 +14,24 @@ from app.schemas.chat import (
     MessagePageResponse,
     ReadPositionResponse,
 )
+from app.services.realtime import (
+    ChatMessageLimiter,
+    NullChatMessageLimiter,
+    NullRealtimePublisher,
+    RealtimePublisher,
+)
 
 
 class ChatService:
-    def __init__(self, repository: ChatRepository) -> None:
+    def __init__(
+        self,
+        repository: ChatRepository,
+        publisher: RealtimePublisher | None = None,
+        limiter: ChatMessageLimiter | None = None,
+    ) -> None:
         self.repository = repository
+        self.publisher = publisher or NullRealtimePublisher()
+        self.limiter = limiter or NullChatMessageLimiter()
 
     async def create_conversation(
         self, *, user_id: UUID, campus_verified: bool, product_id: UUID
@@ -84,6 +97,7 @@ class ChatService:
     ) -> ChatMessageResponse:
         self._require_verified(campus_verified)
         conversation = await self._member(user_id, conversation_id, for_update=True)
+        await self.limiter.check(user_id, conversation_id)
         cleaned = body.strip()
         if not cleaned:
             raise AppError(status_code=422, code="empty_message", message="消息内容不能为空")
@@ -96,24 +110,33 @@ class ChatService:
                     message="消息幂等键已用于其他内容",
                 )
             return self._message(existing)
-        message = await self.repository.create_message(
+        result = await self.repository.create_message(
             conversation_id=conversation.id,
             sender_id=user_id,
             client_message_id=client_message_id,
             body=cleaned,
         )
+        message = result.message
         if message.conversation_id != conversation.id or message.body != cleaned:
             raise AppError(
                 status_code=409,
                 code="message_idempotency_conflict",
                 message="消息幂等键已用于其他内容",
             )
-        return self._message(message)
+        response = self._message(message)
+        if result.created:
+            payload = {
+                "type": "chat.message.created",
+                "data": response.model_dump(mode="json"),
+            }
+            recipients = (conversation.buyer_id, conversation.seller_id)
+            self.repository.after_commit(lambda: self.publisher.publish(recipients, payload))
+        return response
 
     async def mark_read(
         self, *, user_id: UUID, conversation_id: UUID, message_id: UUID
     ) -> ReadPositionResponse:
-        await self._member(user_id, conversation_id)
+        conversation = await self._member(user_id, conversation_id)
         message = await self.repository.get_message(conversation_id, message_id)
         if message is None:
             raise AppError(status_code=404, code="message_not_found", message="消息不存在")
@@ -121,11 +144,25 @@ class ChatService:
             conversation_id=conversation_id, user_id=user_id, message=message
         )
         assert state.last_read_message_id is not None and state.last_read_at is not None
-        return ReadPositionResponse(
+        response = ReadPositionResponse(
             conversation_id=conversation_id,
             last_read_message_id=state.last_read_message_id,
             last_read_at=state.last_read_at,
         )
+        recipients = (conversation.buyer_id, conversation.seller_id)
+        self.repository.after_commit(
+            lambda: self.publisher.publish(
+                recipients,
+                {
+                    "type": "chat.read-position.updated",
+                    "data": {
+                        **response.model_dump(mode="json"),
+                        "user_id": str(user_id),
+                    },
+                },
+            )
+        )
+        return response
 
     async def _member(
         self, user_id: UUID, conversation_id: UUID, *, for_update: bool = False
