@@ -27,7 +27,13 @@ from app.models.identity import (
     role_permissions,
     user_roles,
 )
-from app.models.messaging import Conversation, ConversationReadState, Message
+from app.models.messaging import (
+    Conversation,
+    ConversationReadState,
+    Message,
+    MessageRiskSignal,
+    UserBlock,
+)
 from app.models.moderation import (
     AuditLog,
     ModerationAction,
@@ -35,6 +41,11 @@ from app.models.moderation import (
     ModerationTargetType,
     Report,
     ReportStatus,
+)
+from app.models.notification import (
+    Notification,
+    NotificationDeliveryAttempt,
+    NotificationPreference,
 )
 from app.models.trade import CreditEventType, CreditLedger, Order, OrderEvent, OrderStatus, Review
 
@@ -53,12 +64,16 @@ __all__ = [
     "CreditLedger",
     "Favorite",
     "Message",
+    "MessageRiskSignal",
     "ModerationAction",
     "ModerationRecord",
     "ModerationTargetType",
     "Order",
     "OrderEvent",
     "OrderStatus",
+    "Notification",
+    "NotificationDeliveryAttempt",
+    "NotificationPreference",
     "Permission",
     "PasswordResetToken",
     "Product",
@@ -73,6 +88,7 @@ __all__ = [
     "School",
     "SchoolEmailDomain",
     "User",
+    "UserBlock",
     "UserSession",
     "UserStatus",
     "role_permissions",

@@ -8,10 +8,15 @@ from app.core.exceptions import AppError
 from app.models.messaging import Conversation, Message
 from app.repositories.chat import ChatRepository
 from app.schemas.chat import (
+    BlockedUsersResponse,
     ChatMessageResponse,
+    ChatReportResponse,
     ConversationListResponse,
     ConversationSummary,
     MessagePageResponse,
+    NotificationListResponse,
+    NotificationPreferencesResponse,
+    NotificationResponse,
     ReadPositionResponse,
 )
 from app.services.realtime import (
@@ -48,6 +53,9 @@ class ChatService:
                 code="cannot_message_own_product",
                 message="不能以买家身份联系自己的商品",
             )
+        await self.repository.lock_users(user_id, product.seller_id)
+        if await self.repository.blocked_between(user_id, product.seller_id):
+            raise AppError(status_code=403, code="chat_blocked", message="当前无法与该用户建立会话")
         conversation = await self.repository.create_or_get_conversation(
             product=product, buyer_id=user_id
         )
@@ -97,6 +105,9 @@ class ChatService:
     ) -> ChatMessageResponse:
         self._require_verified(campus_verified)
         conversation = await self._member(user_id, conversation_id, for_update=True)
+        await self.repository.lock_users(conversation.buyer_id, conversation.seller_id)
+        if await self.repository.blocked_between(conversation.buyer_id, conversation.seller_id):
+            raise AppError(status_code=403, code="chat_blocked", message="当前会话已停止发送")
         await self.limiter.check(user_id, conversation_id)
         cleaned = body.strip()
         if not cleaned:
@@ -125,12 +136,31 @@ class ChatService:
             )
         response = self._message(message)
         if result.created:
+            await self.repository.record_risk_flags(message.id, self._risk_flags(cleaned))
+            recipient_id = (
+                conversation.seller_id
+                if user_id == conversation.buyer_id
+                else conversation.buyer_id
+            )
+            notification = await self.repository.create_chat_notification(
+                recipient_id=recipient_id, message=message
+            )
             payload = {
                 "type": "chat.message.created",
                 "data": response.model_dump(mode="json"),
             }
             recipients = (conversation.buyer_id, conversation.seller_id)
             self.repository.after_commit(lambda: self.publisher.publish(recipients, payload))
+            if notification is not None:
+                notification_payload = {
+                    "type": "notification.created",
+                    "data": NotificationResponse.model_validate(
+                        notification, from_attributes=True
+                    ).model_dump(mode="json"),
+                }
+                self.repository.after_commit(
+                    lambda: self.publisher.publish((recipient_id,), notification_payload)
+                )
         return response
 
     async def mark_read(
@@ -173,6 +203,83 @@ class ChatService:
         if conversation is None:
             raise AppError(status_code=404, code="conversation_not_found", message="会话不存在")
         return conversation
+
+    async def block_user(self, *, user_id: UUID, blocked_id: UUID) -> None:
+        if user_id == blocked_id:
+            raise AppError(status_code=422, code="cannot_block_self", message="不能屏蔽自己")
+        if not await self.repository.lock_users(user_id, blocked_id):
+            raise AppError(status_code=404, code="user_not_found", message="用户不存在")
+        await self.repository.block_user(user_id, blocked_id)
+
+    async def unblock_user(self, *, user_id: UUID, blocked_id: UUID) -> None:
+        await self.repository.unblock_user(user_id, blocked_id)
+
+    async def blocked_users(self, user_id: UUID) -> BlockedUsersResponse:
+        return BlockedUsersResponse(
+            user_ids=list(await self.repository.list_blocked_user_ids(user_id))
+        )
+
+    async def report_message(
+        self,
+        *,
+        user_id: UUID,
+        conversation_id: UUID,
+        message_id: UUID,
+        reason_code: str,
+        details: str | None,
+    ) -> ChatReportResponse:
+        await self._member(user_id, conversation_id)
+        message = await self.repository.get_message(conversation_id, message_id)
+        if message is None:
+            raise AppError(status_code=404, code="message_not_found", message="消息不存在")
+        report = await self.repository.report_message(
+            reporter_id=user_id,
+            message_id=message_id,
+            reason_code=reason_code,
+            details=details.strip() if details and details.strip() else None,
+        )
+        return ChatReportResponse(id=report.id, status=report.status.value)
+
+    async def notifications(self, user_id: UUID) -> NotificationListResponse:
+        records = await self.repository.list_notifications(user_id, 100)
+        return NotificationListResponse(
+            items=[
+                NotificationResponse.model_validate(item, from_attributes=True) for item in records
+            ],
+            unread_count=await self.repository.unread_notification_count(user_id),
+        )
+
+    async def mark_notification_read(
+        self, user_id: UUID, notification_id: UUID
+    ) -> NotificationResponse:
+        notification = await self.repository.mark_notification_read(user_id, notification_id)
+        if notification is None:
+            raise AppError(status_code=404, code="notification_not_found", message="通知不存在")
+        return NotificationResponse.model_validate(notification, from_attributes=True)
+
+    async def preferences(self, user_id: UUID) -> NotificationPreferencesResponse:
+        values = await self.repository.notification_preferences(user_id)
+        return NotificationPreferencesResponse(
+            chat=values.get("chat", True),
+            order=values.get("order", True),
+            moderation=values.get("moderation", True),
+            report=values.get("report", True),
+        )
+
+    async def set_preference(
+        self, user_id: UUID, category: str, enabled: bool
+    ) -> NotificationPreferencesResponse:
+        await self.repository.set_notification_preference(user_id, category, enabled)
+        return await self.preferences(user_id)
+
+    @staticmethod
+    def _risk_flags(body: str) -> list[str]:
+        keywords = {
+            "verification_code": ("验证码", "短信码"),
+            "identity_document": ("身份证", "学生证照片"),
+            "off_platform_payment": ("先付款", "微信转账", "支付宝转账"),
+        }
+        return [flag for flag, terms in keywords.items() if any(term in body for term in terms)]
 
     @staticmethod
     def _message(message: Message) -> ChatMessageResponse:

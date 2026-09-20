@@ -27,6 +27,24 @@ export interface MessagePage {
   next_cursor: string | null
 }
 
+export interface NotificationItem {
+  id: string
+  category: 'chat' | 'order' | 'moderation' | 'report'
+  title: string
+  summary: string
+  target_type: string
+  target_id: string | null
+  read_at: string | null
+  created_at: string
+}
+
+export interface NotificationPreferences {
+  chat: boolean
+  order: boolean
+  moderation: boolean
+  report: boolean
+}
+
 interface WebSocketTicket {
   ticket: string
   expires_in: number
@@ -98,4 +116,62 @@ export function chatWebSocketUrl(ticket: string) {
   url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
   url.searchParams.set('ticket', ticket)
   return url.toString()
+}
+
+export async function listNotifications(accessToken: string) {
+  return requestJson<{ items: NotificationItem[]; unread_count: number }>(
+    '/api/v1/chat/notifications',
+    { accessToken },
+  )
+}
+
+export async function readNotification(accessToken: string, notificationId: string) {
+  return requestJson<NotificationItem>(`/api/v1/chat/notifications/${notificationId}/read`, {
+    method: 'PUT',
+    accessToken,
+  })
+}
+
+export async function getNotificationPreferences(accessToken: string) {
+  return requestJson<NotificationPreferences>('/api/v1/chat/notification-preferences', {
+    accessToken,
+  })
+}
+
+export async function setNotificationPreference(
+  accessToken: string,
+  category: keyof NotificationPreferences,
+  enabled: boolean,
+) {
+  return requestJson<NotificationPreferences>('/api/v1/chat/notification-preferences', {
+    method: 'PUT',
+    accessToken,
+    body: { category, enabled },
+  })
+}
+
+export async function blockChatUser(accessToken: string, userId: string) {
+  return requestJson<void>(`/api/v1/chat/blocks/${userId}`, {
+    method: 'PUT',
+    accessToken,
+    acceptedStatuses: [204],
+  })
+}
+
+export async function reportChatMessage(
+  accessToken: string,
+  conversationId: string,
+  messageId: string,
+  reasonCode: 'harassment' | 'fraud' | 'spam' | 'unsafe' | 'other',
+  details: string,
+) {
+  return requestJson<{ id: string; status: string }>(
+    `/api/v1/chat/conversations/${conversationId}/reports`,
+    {
+      method: 'POST',
+      accessToken,
+      acceptedStatuses: [201],
+      body: { message_id: messageId, reason_code: reasonCode, details: details || null },
+    },
+  )
 }

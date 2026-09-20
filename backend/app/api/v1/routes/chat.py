@@ -2,18 +2,25 @@ import asyncio
 from typing import Annotated, cast
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, Query, Response, WebSocket, WebSocketDisconnect
 
 from app.api.dependencies import get_chat_service, get_websocket_ticket_store
 from app.api.v1.routes.auth import get_auth_context
 from app.models.identity import CampusVerificationStatus
 from app.schemas.chat import (
+    BlockedUsersResponse,
     ChatMessageResponse,
+    ChatReportCreate,
+    ChatReportResponse,
     ConversationCreate,
     ConversationListResponse,
     ConversationSummary,
     MessagePageResponse,
     MessageSend,
+    NotificationListResponse,
+    NotificationPreferencesResponse,
+    NotificationPreferenceUpdate,
+    NotificationResponse,
     ReadPositionResponse,
     ReadPositionUpdate,
     WebSocketTicketResponse,
@@ -77,6 +84,88 @@ async def websocket_endpoint(
         pass
     finally:
         await hub.disconnect(user_id, websocket)
+
+
+@router.get("/notifications", response_model=NotificationListResponse)
+async def notifications(
+    context: Annotated[AuthContext, Depends(get_auth_context)],
+    service: Annotated[ChatService, Depends(get_chat_service)],
+) -> NotificationListResponse:
+    return await service.notifications(context.user.id)
+
+
+@router.put("/notifications/{notification_id}/read", response_model=NotificationResponse)
+async def read_notification(
+    notification_id: UUID,
+    context: Annotated[AuthContext, Depends(get_auth_context)],
+    service: Annotated[ChatService, Depends(get_chat_service)],
+) -> NotificationResponse:
+    return await service.mark_notification_read(context.user.id, notification_id)
+
+
+@router.get("/notification-preferences", response_model=NotificationPreferencesResponse)
+async def notification_preferences(
+    context: Annotated[AuthContext, Depends(get_auth_context)],
+    service: Annotated[ChatService, Depends(get_chat_service)],
+) -> NotificationPreferencesResponse:
+    return await service.preferences(context.user.id)
+
+
+@router.put("/notification-preferences", response_model=NotificationPreferencesResponse)
+async def update_notification_preference(
+    payload: NotificationPreferenceUpdate,
+    context: Annotated[AuthContext, Depends(get_auth_context)],
+    service: Annotated[ChatService, Depends(get_chat_service)],
+) -> NotificationPreferencesResponse:
+    return await service.set_preference(context.user.id, payload.category, payload.enabled)
+
+
+@router.get("/blocks", response_model=BlockedUsersResponse)
+async def blocked_users(
+    context: Annotated[AuthContext, Depends(get_auth_context)],
+    service: Annotated[ChatService, Depends(get_chat_service)],
+) -> BlockedUsersResponse:
+    return await service.blocked_users(context.user.id)
+
+
+@router.put("/blocks/{blocked_id}", status_code=204)
+async def block_user(
+    blocked_id: UUID,
+    context: Annotated[AuthContext, Depends(get_auth_context)],
+    service: Annotated[ChatService, Depends(get_chat_service)],
+) -> Response:
+    await service.block_user(user_id=context.user.id, blocked_id=blocked_id)
+    return Response(status_code=204)
+
+
+@router.delete("/blocks/{blocked_id}", status_code=204)
+async def unblock_user(
+    blocked_id: UUID,
+    context: Annotated[AuthContext, Depends(get_auth_context)],
+    service: Annotated[ChatService, Depends(get_chat_service)],
+) -> Response:
+    await service.unblock_user(user_id=context.user.id, blocked_id=blocked_id)
+    return Response(status_code=204)
+
+
+@router.post(
+    "/conversations/{conversation_id}/reports",
+    response_model=ChatReportResponse,
+    status_code=201,
+)
+async def report_message(
+    conversation_id: UUID,
+    payload: ChatReportCreate,
+    context: Annotated[AuthContext, Depends(get_auth_context)],
+    service: Annotated[ChatService, Depends(get_chat_service)],
+) -> ChatReportResponse:
+    return await service.report_message(
+        user_id=context.user.id,
+        conversation_id=conversation_id,
+        message_id=payload.message_id,
+        reason_code=payload.reason_code,
+        details=payload.details,
+    )
 
 
 @router.post("/conversations", response_model=ConversationSummary, status_code=201)

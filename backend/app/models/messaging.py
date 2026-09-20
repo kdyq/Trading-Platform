@@ -4,7 +4,16 @@ from datetime import datetime
 from decimal import Decimal
 from uuid import UUID
 
-from sqlalchemy import CheckConstraint, ForeignKey, Index, Numeric, String, Text, UniqueConstraint
+from sqlalchemy import (
+    JSON,
+    CheckConstraint,
+    ForeignKey,
+    Index,
+    Numeric,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, SoftDeleteMixin, TimestampMixin, UUIDPrimaryKeyMixin, VersionMixin
@@ -70,3 +79,23 @@ class ConversationReadState(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     last_read_at: Mapped[datetime | None]
 
     conversation: Mapped[Conversation] = relationship(back_populates="read_states")
+
+
+class UserBlock(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "user_blocks"
+    __table_args__ = (
+        UniqueConstraint("blocker_id", "blocked_id", name="uq_user_blocks_pair"),
+        CheckConstraint("blocker_id <> blocked_id", name="distinct_users"),
+        Index("ix_user_blocks_blocked", "blocked_id", "created_at"),
+    )
+
+    blocker_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"))
+    blocked_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"))
+
+
+class MessageRiskSignal(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "message_risk_signals"
+    __table_args__ = (UniqueConstraint("message_id", name="uq_message_risk_signals_message"),)
+
+    message_id: Mapped[UUID] = mapped_column(ForeignKey("messages.id", ondelete="RESTRICT"))
+    flags: Mapped[list[str]] = mapped_column(JSON, default=list)

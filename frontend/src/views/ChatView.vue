@@ -3,11 +3,13 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 
 import {
+  blockChatUser,
   chatWebSocketUrl,
   issueWebSocketTicket,
   listConversations,
   listMessages,
   markConversationRead,
+  reportChatMessage,
   sendMessage,
 } from '../api/chat'
 import type { ChatMessage, ConversationSummary } from '../api/chat'
@@ -29,6 +31,10 @@ const loadingMessages = ref(false)
 const loadingOlder = ref(false)
 const draft = ref('')
 const error = ref('')
+const notice = ref('')
+const reportingMessage = ref<DisplayMessage | null>(null)
+const reportReason = ref<'harassment' | 'fraud' | 'spam' | 'unsafe' | 'other'>('harassment')
+const reportDetails = ref('')
 const connection = ref<'connecting' | 'live' | 'retrying' | 'offline'>('offline')
 const composer = ref<HTMLTextAreaElement | null>(null)
 let socket: WebSocket | null = null
@@ -164,6 +170,36 @@ async function submit() {
   messages.value.push(optimistic)
   draft.value = ''
   await deliver(optimistic)
+}
+
+async function blockCurrentUser() {
+  if (!auth.accessToken || !selected.value) return
+  if (!window.confirm(`屏蔽 ${selected.value.other_display_name}？之后双方都不能继续发送消息。`))
+    return
+  try {
+    await blockChatUser(auth.accessToken, selected.value.other_user_id)
+    notice.value = '已屏蔽该用户。历史消息仍会保留作为必要证据。'
+  } catch (caught) {
+    error.value = caught instanceof Error ? caught.message : '屏蔽操作失败'
+  }
+}
+
+async function submitReport() {
+  if (!auth.accessToken || !selectedId.value || !reportingMessage.value) return
+  try {
+    await reportChatMessage(
+      auth.accessToken,
+      selectedId.value,
+      reportingMessage.value.id,
+      reportReason.value,
+      reportDetails.value.trim(),
+    )
+    notice.value = '举报已受理。处理结果会通过站内通知告知你。'
+    reportingMessage.value = null
+    reportDetails.value = ''
+  } catch (caught) {
+    error.value = caught instanceof Error ? caught.message : '举报提交失败'
+  }
 }
 
 function closeSocket() {
@@ -349,6 +385,7 @@ onUnmounted(() => {
           <button class="order-entry" type="button" disabled title="交易功能将在下一阶段开放">
             发起交易
           </button>
+          <button class="safety-entry" type="button" @click="blockCurrentUser">屏蔽</button>
         </header>
 
         <div class="message-history" aria-live="polite" :aria-busy="loadingMessages">
@@ -383,6 +420,14 @@ onUnmounted(() => {
                 >
                   重试
                 </button>
+                <button
+                  v-if="message.sender_id !== auth.user.id"
+                  class="report-message"
+                  type="button"
+                  @click="reportingMessage = message"
+                >
+                  举报
+                </button>
               </div>
             </div>
           </template>
@@ -416,6 +461,34 @@ onUnmounted(() => {
     </div>
 
     <p v-if="error" class="chat-error" role="alert">{{ error }}</p>
+    <p v-if="notice" class="chat-notice" role="status">{{ notice }}</p>
+    <div v-if="reportingMessage" class="report-backdrop" @click.self="reportingMessage = null">
+      <form class="report-card" role="dialog" aria-modal="true" @submit.prevent="submitReport">
+        <p class="eyebrow">安全与治理</p>
+        <h2>举报这条消息</h2>
+        <p>举报将保留目标消息标识用于调查，但不会把私聊正文写入通知。</p>
+        <label>
+          原因
+          <select v-model="reportReason">
+            <option value="harassment">骚扰或辱骂</option>
+            <option value="fraud">疑似诈骗</option>
+            <option value="spam">垃圾信息</option>
+            <option value="unsafe">线下安全风险</option>
+            <option value="other">其他</option>
+          </select>
+        </label>
+        <label>
+          补充说明（可选）
+          <textarea v-model="reportDetails" maxlength="1000" rows="4" />
+        </label>
+        <div>
+          <button class="button button-ghost" type="button" @click="reportingMessage = null">
+            取消
+          </button>
+          <button class="button button-primary" type="submit">提交举报</button>
+        </div>
+      </form>
+    </div>
   </section>
 </template>
 
@@ -584,6 +657,12 @@ onUnmounted(() => {
   background: var(--bg);
   color: var(--ink-2);
 }
+.safety-entry {
+  min-height: 40px;
+  border: 0;
+  background: transparent;
+  color: var(--danger);
+}
 .mobile-back {
   display: none;
   width: 42px;
@@ -724,6 +803,60 @@ onUnmounted(() => {
   background: var(--danger);
   color: white;
   box-shadow: var(--shadow);
+}
+.chat-notice {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: var(--layer-toast);
+  max-width: 420px;
+  padding: 12px 16px;
+  border-radius: 12px;
+  background: var(--leaf);
+  color: white;
+  box-shadow: var(--shadow);
+}
+.report-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: var(--layer-dialog);
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgb(43 33 24 / 38%);
+}
+.report-card {
+  width: min(100%, 500px);
+  padding: 24px;
+  border-radius: 20px;
+  background: white;
+  box-shadow: var(--shadow-hover);
+}
+.report-card h2 {
+  margin: 4px 0;
+}
+.report-card > p:not(.eyebrow) {
+  color: var(--ink-2);
+}
+.report-card label {
+  display: grid;
+  gap: 6px;
+  margin-top: 14px;
+  font-weight: 700;
+}
+.report-card select,
+.report-card textarea {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 10px;
+  color: var(--ink);
+  font: inherit;
+}
+.report-card > div {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 18px;
 }
 .sr-only {
   position: absolute;

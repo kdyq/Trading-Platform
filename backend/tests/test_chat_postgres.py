@@ -3,12 +3,13 @@ import os
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import text
+from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.db.url import database_url_for_sqlalchemy, require_project_database
 from app.models import Base
 from app.models.messaging import Conversation
+from app.models.notification import NotificationDeliveryAttempt
 from app.repositories.chat import SqlAlchemyChatRepository
 
 
@@ -131,6 +132,46 @@ async def _exercise_chat_repository(database_url: str) -> None:
             )
             expected = sorted(messages, key=lambda item: (item.created_at, item.id))[-2:]
             assert [item.id for item in latest] == [item.id for item in expected]
+
+            notification = await repository.create_chat_notification(
+                recipient_id=buyer_id, message=latest_message
+            )
+            duplicate_notification = await repository.create_chat_notification(
+                recipient_id=buyer_id, message=latest_message
+            )
+            assert notification is not None and duplicate_notification is not None
+            assert notification.id == duplicate_notification.id
+            assert latest_message.body not in notification.summary
+            attempts = await session.scalar(
+                select(func.count(NotificationDeliveryAttempt.id)).where(
+                    NotificationDeliveryAttempt.notification_id == notification.id
+                )
+            )
+            assert attempts == 2
+            assert await repository.unread_notification_count(buyer_id) == 1
+            assert await repository.mark_notification_read(buyer_id, notification.id) is not None
+            assert await repository.unread_notification_count(buyer_id) == 0
+
+            report = await repository.report_message(
+                reporter_id=buyer_id,
+                message_id=latest_message.id,
+                reason_code="spam",
+                details="重复发送无关信息",
+            )
+            repeated_report = await repository.report_message(
+                reporter_id=buyer_id,
+                message_id=latest_message.id,
+                reason_code="spam",
+                details="不会覆盖已有证据",
+            )
+            assert report.id == repeated_report.id
+
+            assert await repository.lock_users(buyer_id, seller_id)
+            await repository.block_user(buyer_id, seller_id)
+            assert await repository.blocked_between(buyer_id, seller_id)
+            assert await repository.list_blocked_user_ids(buyer_id) == [seller_id]
+            await repository.unblock_user(buyer_id, seller_id)
+            assert not await repository.blocked_between(buyer_id, seller_id)
     finally:
         await engine.dispose()
         async with admin_engine.begin() as connection:

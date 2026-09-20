@@ -35,6 +35,8 @@ class FakeChatRepository:
         self.messages: list[Message] = []
         self.read_states: dict[UUID, Any] = {}
         self.after_commit_callbacks: list[Any] = []
+        self.blocked = False
+        self.risk_flags: dict[UUID, list[str]] = {}
 
     async def visible_product_for_chat(self, product_id):  # type: ignore[no-untyped-def]
         return self.product if product_id == self.product_id else None
@@ -42,6 +44,21 @@ class FakeChatRepository:
     async def create_or_get_conversation(self, *, product, buyer_id):  # type: ignore[no-untyped-def]
         assert product == self.product and buyer_id == self.buyer_id
         return self.conversation
+
+    async def lock_users(self, first_id, second_id):  # type: ignore[no-untyped-def]
+        return True
+
+    async def blocked_between(self, first_id, second_id):  # type: ignore[no-untyped-def]
+        return self.blocked
+
+    async def block_user(self, blocker_id, blocked_id):  # type: ignore[no-untyped-def]
+        self.blocked = True
+
+    async def unblock_user(self, blocker_id, blocked_id):  # type: ignore[no-untyped-def]
+        self.blocked = False
+
+    async def list_blocked_user_ids(self, blocker_id):  # type: ignore[no-untyped-def]
+        return [self.seller_id] if self.blocked else []
 
     async def list_conversations(self, user_id, limit):  # type: ignore[no-untyped-def]
         if user_id not in {self.buyer_id, self.seller_id}:
@@ -118,6 +135,35 @@ class FakeChatRepository:
 
     def after_commit(self, callback):  # type: ignore[no-untyped-def]
         self.after_commit_callbacks.append(callback)
+
+    async def record_risk_flags(self, message_id, flags):  # type: ignore[no-untyped-def]
+        self.risk_flags[message_id] = flags
+
+    async def create_chat_notification(self, **values):  # type: ignore[no-untyped-def]
+        return None
+
+    async def create_notification_event(self, **values):  # type: ignore[no-untyped-def]
+        return None
+
+    async def report_message(self, **values):  # type: ignore[no-untyped-def]
+        return SimpleNamespace(id=uuid4(), status=SimpleNamespace(value="open"))
+
+    async def list_notifications(self, user_id, limit):  # type: ignore[no-untyped-def]
+        return []
+
+    async def unread_notification_count(self, user_id):  # type: ignore[no-untyped-def]
+        return 0
+
+    async def mark_notification_read(self, user_id, notification_id):  # type: ignore[no-untyped-def]
+        return None
+
+    async def notification_preferences(self, user_id):  # type: ignore[no-untyped-def]
+        return {}
+
+    async def set_notification_preference(  # type: ignore[no-untyped-def]
+        self, user_id, category, enabled
+    ):
+        return None
 
     async def mark_read(self, *, conversation_id, user_id, message):  # type: ignore[no-untyped-def]
         state = SimpleNamespace(
@@ -230,3 +276,30 @@ async def test_messages_are_idempotent_private_and_cursor_paginated() -> None:
             page_size=20,
         )
     assert hidden.value.code == "conversation_not_found"
+
+
+@pytest.mark.anyio
+async def test_block_stops_new_messages_and_risk_hook_records_without_exposing_flags() -> None:
+    repository = FakeChatRepository()
+    service = ChatService(repository)
+
+    flagged = await service.send_message(
+        user_id=repository.buyer_id,
+        campus_verified=True,
+        conversation_id=repository.conversation_id,
+        client_message_id="message_risk_001",
+        body="不要发送验证码，也不要先付款",
+    )
+    assert repository.risk_flags[flagged.id] == ["verification_code", "off_platform_payment"]
+    assert "risk" not in flagged.model_dump()
+
+    await service.block_user(user_id=repository.buyer_id, blocked_id=repository.seller_id)
+    with pytest.raises(AppError) as blocked:
+        await service.send_message(
+            user_id=repository.seller_id,
+            campus_verified=True,
+            conversation_id=repository.conversation_id,
+            client_message_id="message_blocked_001",
+            body="仍然发送",
+        )
+    assert blocked.value.code == "chat_blocked"

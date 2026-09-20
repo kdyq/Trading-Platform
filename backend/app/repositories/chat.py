@@ -5,14 +5,26 @@ from decimal import Decimal
 from typing import Protocol, cast
 from uuid import UUID, uuid4
 
-from sqlalchemy import case, func, or_, select
+from sqlalchemy import case, delete, func, or_, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
 from app.models.catalog import Category, Product, ProductStatus
 from app.models.identity import Campus, School, User, UserStatus
-from app.models.messaging import Conversation, ConversationReadState, Message
+from app.models.messaging import (
+    Conversation,
+    ConversationReadState,
+    Message,
+    MessageRiskSignal,
+    UserBlock,
+)
+from app.models.moderation import AuditLog, ModerationTargetType, Report
+from app.models.notification import (
+    Notification,
+    NotificationDeliveryAttempt,
+    NotificationPreference,
+)
 
 
 @dataclass(frozen=True)
@@ -79,6 +91,52 @@ class ChatRepository(Protocol):
     async def mark_read(
         self, *, conversation_id: UUID, user_id: UUID, message: Message
     ) -> ConversationReadState: ...
+
+    async def lock_users(self, first_id: UUID, second_id: UUID) -> bool: ...
+
+    async def blocked_between(self, first_id: UUID, second_id: UUID) -> bool: ...
+
+    async def block_user(self, blocker_id: UUID, blocked_id: UUID) -> None: ...
+
+    async def unblock_user(self, blocker_id: UUID, blocked_id: UUID) -> None: ...
+
+    async def list_blocked_user_ids(self, blocker_id: UUID) -> Sequence[UUID]: ...
+
+    async def record_risk_flags(self, message_id: UUID, flags: list[str]) -> None: ...
+
+    async def create_chat_notification(
+        self, *, recipient_id: UUID, message: Message
+    ) -> Notification | None: ...
+
+    async def create_notification_event(
+        self,
+        *,
+        recipient_id: UUID,
+        event_key: str,
+        category: str,
+        title: str,
+        summary: str,
+        target_type: str,
+        target_id: UUID | None,
+    ) -> Notification | None: ...
+
+    async def report_message(
+        self, *, reporter_id: UUID, message_id: UUID, reason_code: str, details: str | None
+    ) -> Report: ...
+
+    async def list_notifications(self, user_id: UUID, limit: int) -> Sequence[Notification]: ...
+
+    async def unread_notification_count(self, user_id: UUID) -> int: ...
+
+    async def mark_notification_read(
+        self, user_id: UUID, notification_id: UUID
+    ) -> Notification | None: ...
+
+    async def notification_preferences(self, user_id: UUID) -> dict[str, bool]: ...
+
+    async def set_notification_preference(
+        self, user_id: UUID, category: str, enabled: bool
+    ) -> None: ...
 
 
 class SqlAlchemyChatRepository:
@@ -345,3 +403,226 @@ class SqlAlchemyChatRepository:
         )
         assert state is not None
         return state
+
+    async def lock_users(self, first_id: UUID, second_id: UUID) -> bool:
+        users = list(
+            await self.session.scalars(
+                select(User.id)
+                .where(User.id.in_((first_id, second_id)))
+                .order_by(User.id)
+                .with_for_update()
+            )
+        )
+        return len(users) == len({first_id, second_id})
+
+    async def blocked_between(self, first_id: UUID, second_id: UUID) -> bool:
+        return bool(
+            await self.session.scalar(
+                select(func.count(UserBlock.id)).where(
+                    or_(
+                        (UserBlock.blocker_id == first_id) & (UserBlock.blocked_id == second_id),
+                        (UserBlock.blocker_id == second_id) & (UserBlock.blocked_id == first_id),
+                    )
+                )
+            )
+        )
+
+    async def block_user(self, blocker_id: UUID, blocked_id: UUID) -> None:
+        await self.session.execute(
+            insert(UserBlock)
+            .values(id=uuid4(), blocker_id=blocker_id, blocked_id=blocked_id)
+            .on_conflict_do_nothing(constraint="uq_user_blocks_pair")
+        )
+
+    async def unblock_user(self, blocker_id: UUID, blocked_id: UUID) -> None:
+        await self.session.execute(
+            delete(UserBlock).where(
+                UserBlock.blocker_id == blocker_id, UserBlock.blocked_id == blocked_id
+            )
+        )
+
+    async def list_blocked_user_ids(self, blocker_id: UUID) -> Sequence[UUID]:
+        return list(
+            await self.session.scalars(
+                select(UserBlock.blocked_id)
+                .where(UserBlock.blocker_id == blocker_id)
+                .order_by(UserBlock.created_at.desc())
+            )
+        )
+
+    async def record_risk_flags(self, message_id: UUID, flags: list[str]) -> None:
+        if not flags:
+            return
+        await self.session.execute(
+            insert(MessageRiskSignal)
+            .values(id=uuid4(), message_id=message_id, flags=flags)
+            .on_conflict_do_nothing(constraint="uq_message_risk_signals_message")
+        )
+
+    async def create_chat_notification(
+        self, *, recipient_id: UUID, message: Message
+    ) -> Notification | None:
+        return await self.create_notification_event(
+            recipient_id=recipient_id,
+            event_key=f"chat.message:{message.id}:{recipient_id}",
+            category="chat",
+            title="收到一条新消息",
+            summary="你有一条新的校内私信，打开会话查看详情。",
+            target_type="conversation",
+            target_id=message.conversation_id,
+        )
+
+    async def create_notification_event(
+        self,
+        *,
+        recipient_id: UUID,
+        event_key: str,
+        category: str,
+        title: str,
+        summary: str,
+        target_type: str,
+        target_id: UUID | None,
+    ) -> Notification | None:
+        enabled = await self.session.scalar(
+            select(NotificationPreference.enabled).where(
+                NotificationPreference.user_id == recipient_id,
+                NotificationPreference.category == category,
+            )
+        )
+        if enabled is False:
+            return None
+        notification_id = uuid4()
+        await self.session.execute(
+            insert(Notification)
+            .values(
+                id=notification_id,
+                user_id=recipient_id,
+                event_key=event_key,
+                category=category,
+                title=title,
+                summary=summary,
+                target_type=target_type,
+                target_id=target_id,
+            )
+            .on_conflict_do_nothing(constraint="uq_notifications_event_key")
+        )
+        notification = await self.session.scalar(
+            select(Notification).where(Notification.event_key == event_key)
+        )
+        assert notification is not None
+        attempt_no = (
+            int(
+                await self.session.scalar(
+                    select(func.count(NotificationDeliveryAttempt.id)).where(
+                        NotificationDeliveryAttempt.notification_id == notification.id
+                    )
+                )
+                or 0
+            )
+            + 1
+        )
+        await self.session.execute(
+            insert(NotificationDeliveryAttempt)
+            .values(
+                id=uuid4(),
+                notification_id=notification.id,
+                attempt_no=attempt_no,
+                status="delivered",
+                delivered_at=datetime.now(UTC),
+            )
+            .on_conflict_do_nothing(constraint="uq_notification_attempt_number")
+        )
+        return notification
+
+    async def report_message(
+        self, *, reporter_id: UUID, message_id: UUID, reason_code: str, details: str | None
+    ) -> Report:
+        report_id = uuid4()
+        inserted_id = await self.session.scalar(
+            insert(Report)
+            .values(
+                id=report_id,
+                reporter_id=reporter_id,
+                target_type=ModerationTargetType.MESSAGE,
+                target_id=message_id,
+                reason_code=reason_code,
+                details=details,
+            )
+            .on_conflict_do_nothing(constraint="uq_reports_key")
+            .returning(Report.id)
+        )
+        report = await self.session.scalar(
+            select(Report).where(
+                Report.reporter_id == reporter_id,
+                Report.target_type == ModerationTargetType.MESSAGE,
+                Report.target_id == message_id,
+                Report.reason_code == reason_code,
+            )
+        )
+        assert report is not None
+        if inserted_id is not None:
+            self.session.add(
+                AuditLog(
+                    id=uuid4(),
+                    actor_id=reporter_id,
+                    request_id=f"chat-report:{report.id}",
+                    action="chat.report.created",
+                    target_type="message",
+                    target_id=message_id,
+                    audit_data={"reason_code": reason_code},
+                )
+            )
+        return report
+
+    async def list_notifications(self, user_id: UUID, limit: int) -> Sequence[Notification]:
+        return list(
+            await self.session.scalars(
+                select(Notification)
+                .where(Notification.user_id == user_id)
+                .order_by(Notification.created_at.desc(), Notification.id.desc())
+                .limit(limit)
+            )
+        )
+
+    async def unread_notification_count(self, user_id: UUID) -> int:
+        return int(
+            await self.session.scalar(
+                select(func.count(Notification.id)).where(
+                    Notification.user_id == user_id, Notification.read_at.is_(None)
+                )
+            )
+            or 0
+        )
+
+    async def mark_notification_read(
+        self, user_id: UUID, notification_id: UUID
+    ) -> Notification | None:
+        notification = await self.session.scalar(
+            select(Notification).where(
+                Notification.id == notification_id, Notification.user_id == user_id
+            )
+        )
+        if notification is not None and notification.read_at is None:
+            notification.read_at = datetime.now(UTC)
+            await self.session.flush()
+        return notification
+
+    async def notification_preferences(self, user_id: UUID) -> dict[str, bool]:
+        result = await self.session.execute(
+            select(NotificationPreference.category, NotificationPreference.enabled).where(
+                NotificationPreference.user_id == user_id
+            )
+        )
+        return {category: enabled for category, enabled in result}
+
+    async def set_notification_preference(
+        self, user_id: UUID, category: str, enabled: bool
+    ) -> None:
+        await self.session.execute(
+            insert(NotificationPreference)
+            .values(id=uuid4(), user_id=user_id, category=category, enabled=enabled)
+            .on_conflict_do_update(
+                constraint="uq_notification_preferences_user_category",
+                set_={"enabled": enabled, "updated_at": datetime.now(UTC)},
+            )
+        )

@@ -1,5 +1,6 @@
 from datetime import datetime
 from decimal import Decimal
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -58,3 +59,46 @@ class ReadPositionResponse(BaseModel):
 class WebSocketTicketResponse(BaseModel):
     ticket: str
     expires_in: int = Field(gt=0)
+
+
+class BlockedUsersResponse(BaseModel):
+    user_ids: list[UUID]
+
+
+class ChatReportCreate(BaseModel):
+    message_id: UUID
+    reason_code: Literal["harassment", "fraud", "spam", "unsafe", "other"]
+    details: str | None = Field(default=None, max_length=1000)
+
+
+class ChatReportResponse(BaseModel):
+    id: UUID
+    status: str
+
+
+class NotificationResponse(BaseModel):
+    id: UUID
+    category: str
+    title: str
+    summary: str
+    target_type: str
+    target_id: UUID | None
+    read_at: datetime | None
+    created_at: datetime
+
+
+class NotificationListResponse(BaseModel):
+    items: list[NotificationResponse]
+    unread_count: int = Field(ge=0)
+
+
+class NotificationPreferencesResponse(BaseModel):
+    chat: bool
+    order: bool
+    moderation: bool
+    report: bool
+
+
+class NotificationPreferenceUpdate(BaseModel):
+    category: Literal["chat", "order", "moderation", "report"]
+    enabled: bool
