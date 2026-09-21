@@ -15,6 +15,7 @@ from app.models.identity import (
     User,
 )
 from app.models.messaging import Conversation
+from app.models.moderation import Report
 from app.models.notification import (
     Notification,
     NotificationDeliveryAttempt,
@@ -62,6 +63,8 @@ class OrderRepository(Protocol):
     async def withdraw_pending_proposals(self, order_id: UUID) -> None: ...
 
     async def claim_expired_pending(self, limit: int) -> Sequence[Order]: ...
+
+    def add_dispute_report(self, report: Report) -> None: ...
 
     async def find_command(self, actor_id: UUID, client_action_id: str) -> OrderCommand | None: ...
 
@@ -253,6 +256,9 @@ class SqlAlchemyOrderRepository:
                 .with_for_update(skip_locked=True)
             )
         )
+
+    def add_dispute_report(self, report: Report) -> None:
+        self.session.add(report)
 
     async def find_command(self, actor_id: UUID, client_action_id: str) -> OrderCommand | None:
         return cast(

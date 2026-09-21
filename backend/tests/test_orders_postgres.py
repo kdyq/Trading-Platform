@@ -191,6 +191,38 @@ async def _exercise_concurrent_accept(database_url: str) -> None:
             assert expired is not None and expired.status == OrderStatus.EXPIRED
             assert expiration_events == 1
             assert product is not None and product.status == ProductStatus.ON_SALE
+
+        completed_candidate = await create_order(second_buyer_id, "postgres_complete_1")
+        async with factory.begin() as session:
+            await OrderService(SqlAlchemyOrderRepository(session)).accept(
+                user_id=seller_id,
+                campus_status=CampusVerificationStatus.VERIFIED,
+                order_id=completed_candidate.id,
+                client_action_id="postgres_complete_accept_1",
+            )
+        async with factory.begin() as session:
+            delivered = await OrderService(SqlAlchemyOrderRepository(session)).mark_delivered(
+                user_id=seller_id,
+                campus_status=CampusVerificationStatus.VERIFIED,
+                order_id=completed_candidate.id,
+                client_action_id="postgres_deliver_1",
+            )
+            assert delivered.status == OrderStatus.SELLER_DELIVERED.value
+        async with factory.begin() as session:
+            completed = await OrderService(SqlAlchemyOrderRepository(session)).complete(
+                user_id=second_buyer_id,
+                campus_status=CampusVerificationStatus.VERIFIED,
+                order_id=completed_candidate.id,
+                client_action_id="postgres_complete_1",
+            )
+            assert completed.status == OrderStatus.COMPLETED.value
+        async with factory() as session:
+            final_order = await session.get(Order, completed_candidate.id)
+            final_product = await session.get(Product, product_id)
+            assert final_order is not None and final_order.status == OrderStatus.COMPLETED
+            assert final_order.completed_at is not None
+            assert final_product is not None and final_product.status == ProductStatus.SOLD
+            assert final_product.sold_at is not None
     finally:
         await engine.dispose()
         async with admin_engine.begin() as connection:

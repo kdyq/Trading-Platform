@@ -6,6 +6,7 @@ from uuid import UUID, uuid4
 from app.core.exceptions import AppError
 from app.models.catalog import ProductStatus
 from app.models.identity import CampusVerificationStatus
+from app.models.moderation import ModerationTargetType, Report, ReportStatus
 from app.models.trade import (
     MeetingProposalStatus,
     Order,
@@ -19,6 +20,7 @@ from app.schemas.orders import (
     MeetingProposalResponse,
     OrderCancel,
     OrderCreate,
+    OrderDispute,
     OrderResponse,
 )
 
@@ -458,6 +460,184 @@ class OrderService:
                 order_id=order.id,
             )
         return len(orders)
+
+    async def mark_delivered(
+        self,
+        *,
+        user_id: UUID,
+        campus_status: CampusVerificationStatus,
+        order_id: UUID,
+        client_action_id: str,
+    ) -> OrderResponse:
+        self._require_verified(campus_status)
+        order = await self.repository.get_order(order_id, for_update=True)
+        if order is None or order.seller_id != user_id:
+            raise AppError(status_code=404, code="order_not_found", message="订单不存在")
+        payload_hash = self._payload_hash("mark_delivered", {})
+        existing = await self.repository.find_command(user_id, client_action_id)
+        if existing is not None:
+            self._require_same_command(existing, order.id, "mark_delivered", payload_hash)
+            return self._response(order)
+        if order.status not in (OrderStatus.ACCEPTED, OrderStatus.SCHEDULED):
+            raise AppError(
+                status_code=409, code="invalid_order_state", message="当前订单不能确认交付"
+            )
+        previous = order.status
+        order.status = OrderStatus.SELLER_DELIVERED
+        order.seller_delivered_at = datetime.now(UTC)
+        event = self.repository.add_event(
+            order=order,
+            actor_id=user_id,
+            from_status=previous,
+            to_status=OrderStatus.SELLER_DELIVERED,
+            note="卖家确认已当面交付商品",
+        )
+        self.repository.add_command(
+            order_id=order.id,
+            actor_id=user_id,
+            client_action_id=client_action_id,
+            command="mark_delivered",
+            payload_hash=payload_hash,
+            event=event,
+        )
+        await self.repository.create_notification(
+            recipient_id=order.buyer_id,
+            event_key=f"order.delivered:{order.id}",
+            title="卖家已确认交付",
+            summary="请在核对商品后确认完成；如有异常可从订单发起争议。",
+            order_id=order.id,
+        )
+        await self.repository.refresh_order(order)
+        return self._response(order)
+
+    async def complete(
+        self,
+        *,
+        user_id: UUID,
+        campus_status: CampusVerificationStatus,
+        order_id: UUID,
+        client_action_id: str,
+    ) -> OrderResponse:
+        self._require_verified(campus_status)
+        snapshot = await self.repository.get_order(order_id)
+        if snapshot is None or snapshot.buyer_id != user_id:
+            raise AppError(status_code=404, code="order_not_found", message="订单不存在")
+        product = await self.repository.lock_product(snapshot.product_id)
+        order = await self.repository.get_order(order_id, for_update=True)
+        if order is None or order.buyer_id != user_id:
+            raise AppError(status_code=404, code="order_not_found", message="订单不存在")
+        payload_hash = self._payload_hash("complete", {})
+        existing = await self.repository.find_command(user_id, client_action_id)
+        if existing is not None:
+            self._require_same_command(existing, order.id, "complete", payload_hash)
+            return self._response(order)
+        if order.status != OrderStatus.SELLER_DELIVERED:
+            raise AppError(
+                status_code=409, code="invalid_order_state", message="卖家确认交付后才能完成"
+            )
+        if product is None or product.status != ProductStatus.RESERVED:
+            raise AppError(status_code=409, code="product_not_reserved", message="商品预留状态异常")
+        now = datetime.now(UTC)
+        previous = order.status
+        order.status = OrderStatus.COMPLETED
+        order.completed_at = now
+        product.status = ProductStatus.SOLD
+        product.sold_at = now
+        product.reserved_at = None
+        event = self.repository.add_event(
+            order=order,
+            actor_id=user_id,
+            from_status=previous,
+            to_status=OrderStatus.COMPLETED,
+            note="买家确认收货，订单完成",
+        )
+        self.repository.add_command(
+            order_id=order.id,
+            actor_id=user_id,
+            client_action_id=client_action_id,
+            command="complete",
+            payload_hash=payload_hash,
+            event=event,
+        )
+        await self.repository.create_notification(
+            recipient_id=order.seller_id,
+            event_key=f"order.completed:{order.id}",
+            title="订单已完成",
+            summary="买家已确认收货，本次校内面交已完成。",
+            order_id=order.id,
+        )
+        await self.repository.refresh_order(order)
+        return self._response(order)
+
+    async def dispute(
+        self,
+        *,
+        user_id: UUID,
+        campus_status: CampusVerificationStatus,
+        order_id: UUID,
+        payload: OrderDispute,
+    ) -> OrderResponse:
+        self._require_verified(campus_status)
+        order = await self.repository.get_order(order_id, for_update=True)
+        self._require_participant(order, user_id)
+        assert order is not None
+        payload_hash = self._payload_hash(
+            "dispute", {"reason_code": payload.reason_code, "details": payload.details}
+        )
+        existing = await self.repository.find_command(user_id, payload.client_action_id)
+        if existing is not None:
+            self._require_same_command(existing, order.id, "dispute", payload_hash)
+            return self._response(order)
+        if order.status not in (
+            OrderStatus.ACCEPTED,
+            OrderStatus.SCHEDULED,
+            OrderStatus.SELLER_DELIVERED,
+        ):
+            raise AppError(
+                status_code=409, code="invalid_order_state", message="当前订单不能发起争议"
+            )
+        now = datetime.now(UTC)
+        previous = order.status
+        order.status = OrderStatus.DISPUTED
+        order.disputed_at = now
+        order.dispute_reason_code = payload.reason_code
+        order.dispute_details = payload.details
+        report = Report(
+            id=uuid4(),
+            reporter_id=user_id,
+            target_type=ModerationTargetType.ORDER,
+            target_id=order.id,
+            reason_code=payload.reason_code,
+            details=payload.details,
+            status=ReportStatus.OPEN,
+        )
+        self.repository.add_dispute_report(report)
+        event = self.repository.add_event(
+            order=order,
+            actor_id=user_id,
+            from_status=previous,
+            to_status=OrderStatus.DISPUTED,
+            note="订单已进入争议处理",
+            event_data={"report_id": str(report.id), "reason_code": payload.reason_code},
+        )
+        self.repository.add_command(
+            order_id=order.id,
+            actor_id=user_id,
+            client_action_id=payload.client_action_id,
+            command="dispute",
+            payload_hash=payload_hash,
+            event=event,
+            result_id=report.id,
+        )
+        await self.repository.create_notification(
+            recipient_id=self._other_party(order, user_id),
+            event_key=f"order.disputed:{order.id}",
+            title="订单已进入争议处理",
+            summary="对方已提交订单争议，订单状态已冻结，等待授权人员处理。",
+            order_id=order.id,
+        )
+        await self.repository.refresh_order(order)
+        return self._response(order)
 
     @staticmethod
     def _proposal_response(proposal: OrderMeetingProposal) -> MeetingProposalResponse:

@@ -25,6 +25,11 @@ class OrderCancel(OrderAction):
     note: str | None = Field(default=None, max_length=500)
 
 
+class OrderDispute(OrderAction):
+    reason_code: str = Field(pattern=r"^(item_not_as_described|no_show|safety_concern|other)$")
+    details: str = Field(min_length=5, max_length=1000)
+
+
 class MeetingProposalResponse(BaseModel):
     id: UUID
     order_id: UUID

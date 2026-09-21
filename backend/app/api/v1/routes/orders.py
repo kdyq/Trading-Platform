@@ -11,6 +11,7 @@ from app.schemas.orders import (
     OrderAction,
     OrderCancel,
     OrderCreate,
+    OrderDispute,
     OrderResponse,
 )
 from app.services.auth import AuthContext
@@ -92,6 +93,51 @@ async def cancel_order(
     service: Annotated[OrderService, Depends(get_order_service)],
 ) -> OrderResponse:
     return await service.cancel(
+        user_id=context.user.id,
+        campus_status=context.campus_verification_status,
+        order_id=order_id,
+        payload=payload,
+    )
+
+
+@router.post("/{order_id}/deliver", response_model=OrderResponse)
+async def mark_order_delivered(
+    order_id: UUID,
+    payload: OrderAction,
+    context: Annotated[AuthContext, Depends(get_auth_context)],
+    service: Annotated[OrderService, Depends(get_order_service)],
+) -> OrderResponse:
+    return await service.mark_delivered(
+        user_id=context.user.id,
+        campus_status=context.campus_verification_status,
+        order_id=order_id,
+        client_action_id=payload.client_action_id,
+    )
+
+
+@router.post("/{order_id}/complete", response_model=OrderResponse)
+async def complete_order(
+    order_id: UUID,
+    payload: OrderAction,
+    context: Annotated[AuthContext, Depends(get_auth_context)],
+    service: Annotated[OrderService, Depends(get_order_service)],
+) -> OrderResponse:
+    return await service.complete(
+        user_id=context.user.id,
+        campus_status=context.campus_verification_status,
+        order_id=order_id,
+        client_action_id=payload.client_action_id,
+    )
+
+
+@router.post("/{order_id}/dispute", response_model=OrderResponse)
+async def dispute_order(
+    order_id: UUID,
+    payload: OrderDispute,
+    context: Annotated[AuthContext, Depends(get_auth_context)],
+    service: Annotated[OrderService, Depends(get_order_service)],
+) -> OrderResponse:
+    return await service.dispute(
         user_id=context.user.id,
         campus_status=context.campus_verification_status,
         order_id=order_id,

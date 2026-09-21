@@ -16,7 +16,7 @@ from app.models.trade import (
     OrderMeetingProposal,
     OrderStatus,
 )
-from app.schemas.orders import MeetingProposalCreate, OrderCancel, OrderCreate
+from app.schemas.orders import MeetingProposalCreate, OrderCancel, OrderCreate, OrderDispute
 from app.services.orders import OrderService
 
 
@@ -45,6 +45,7 @@ class FakeOrderRepository:
         self.events: list[OrderEvent] = []
         self.proposals: dict[UUID, OrderMeetingProposal] = {}
         self.notifications: list[dict[str, object]] = []
+        self.reports: list[object] = []
 
     async def verified_campus_id(self, user_id):  # type: ignore[no-untyped-def]
         return self.campus_id if user_id == self.buyer_id else None
@@ -109,6 +110,9 @@ class FakeOrderRepository:
             and order.expires_at is not None
             and order.expires_at <= now
         ][:limit]
+
+    def add_dispute_report(self, report):  # type: ignore[no-untyped-def]
+        self.reports.append(report)
 
     async def find_command(self, actor_id, client_action_id):  # type: ignore[no-untyped-def]
         return self.commands.get((actor_id, client_action_id))
@@ -380,3 +384,107 @@ async def test_meeting_proposal_rejects_unauthorized_and_out_of_range_times() ->
             ),
         )
     assert outsider.value.code == "order_not_found"
+
+
+@pytest.mark.anyio
+async def test_seller_delivery_and_buyer_completion_are_idempotent_and_atomic() -> None:
+    repository = FakeOrderRepository()
+    service = OrderService(repository)
+    created = await service.create(
+        user_id=repository.buyer_id,
+        campus_status=CampusVerificationStatus.VERIFIED,
+        payload=OrderCreate(product_id=repository.product_id, idempotency_key="complete_create_1"),
+    )
+    await service.accept(
+        user_id=repository.seller_id,
+        campus_status=CampusVerificationStatus.VERIFIED,
+        order_id=created.id,
+        client_action_id="complete_accept_1",
+    )
+    delivered = await service.mark_delivered(
+        user_id=repository.seller_id,
+        campus_status=CampusVerificationStatus.VERIFIED,
+        order_id=created.id,
+        client_action_id="complete_deliver_1",
+    )
+    repeated_delivery = await service.mark_delivered(
+        user_id=repository.seller_id,
+        campus_status=CampusVerificationStatus.VERIFIED,
+        order_id=created.id,
+        client_action_id="complete_deliver_1",
+    )
+    assert delivered.status == OrderStatus.SELLER_DELIVERED.value
+    assert repeated_delivery.status == OrderStatus.SELLER_DELIVERED.value
+
+    completed = await service.complete(
+        user_id=repository.buyer_id,
+        campus_status=CampusVerificationStatus.VERIFIED,
+        order_id=created.id,
+        client_action_id="complete_confirm_1",
+    )
+    repeated_completion = await service.complete(
+        user_id=repository.buyer_id,
+        campus_status=CampusVerificationStatus.VERIFIED,
+        order_id=created.id,
+        client_action_id="complete_confirm_1",
+    )
+    assert completed.status == OrderStatus.COMPLETED.value
+    assert repeated_completion.status == OrderStatus.COMPLETED.value
+    assert repository.product.status == ProductStatus.SOLD
+    assert repository.product.sold_at is not None
+
+    with pytest.raises(AppError) as seller_cannot_complete:
+        await service.complete(
+            user_id=repository.seller_id,
+            campus_status=CampusVerificationStatus.VERIFIED,
+            order_id=created.id,
+            client_action_id="complete_confirm_2",
+        )
+    assert seller_cannot_complete.value.code == "order_not_found"
+
+
+@pytest.mark.anyio
+async def test_dispute_freezes_order_and_creates_one_moderation_entry() -> None:
+    repository = FakeOrderRepository()
+    service = OrderService(repository)
+    created = await service.create(
+        user_id=repository.buyer_id,
+        campus_status=CampusVerificationStatus.VERIFIED,
+        payload=OrderCreate(product_id=repository.product_id, idempotency_key="dispute_create_1"),
+    )
+    await service.accept(
+        user_id=repository.seller_id,
+        campus_status=CampusVerificationStatus.VERIFIED,
+        order_id=created.id,
+        client_action_id="dispute_accept_1",
+    )
+    payload = OrderDispute(
+        client_action_id="dispute_open_1",
+        reason_code="item_not_as_described",
+        details="现场商品与描述存在明显差异",
+    )
+    disputed = await service.dispute(
+        user_id=repository.buyer_id,
+        campus_status=CampusVerificationStatus.VERIFIED,
+        order_id=created.id,
+        payload=payload,
+    )
+    repeated = await service.dispute(
+        user_id=repository.buyer_id,
+        campus_status=CampusVerificationStatus.VERIFIED,
+        order_id=created.id,
+        payload=payload,
+    )
+    assert disputed.status == OrderStatus.DISPUTED.value
+    assert repeated.status == OrderStatus.DISPUTED.value
+    assert len(repository.reports) == 1
+    assert repository.product.status == ProductStatus.RESERVED
+
+    with pytest.raises(AppError) as cannot_complete:
+        await service.complete(
+            user_id=repository.buyer_id,
+            campus_status=CampusVerificationStatus.VERIFIED,
+            order_id=created.id,
+            client_action_id="dispute_complete_1",
+        )
+    assert cannot_complete.value.code == "invalid_order_state"
