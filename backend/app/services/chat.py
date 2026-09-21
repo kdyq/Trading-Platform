@@ -29,7 +29,7 @@ from app.services.realtime import (
     RealtimePublisher,
 )
 
-LINK_PATTERN = re.compile(r"(?i)\b(?:https?://|www\.)\S+")
+LINK_PATTERN = re.compile(r"(?i)(?:https?://|www\.)")
 MAX_MESSAGE_LINKS = 5
 
 

@@ -41,7 +41,7 @@ class MessageSend(BaseModel):
             for character in value
         ):
             raise ValueError("消息包含不支持的控制字符")
-        if len(re.findall(r"(?i)\b(?:https?://|www\.)\S+", value)) > 5:
+        if len(re.findall(r"(?i)(?:https?://|www\.)", value)) > 5:
             raise ValueError("单条消息最多包含 5 个链接")
         return value
 

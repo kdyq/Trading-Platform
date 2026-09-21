@@ -209,11 +209,14 @@ class RedisRealtimePublisher:
             "payload": payload,
         }
         try:
-            await self.redis.publish(CHANNEL, json.dumps(envelope, ensure_ascii=False))
+            subscriber_count = await cast(
+                Awaitable[int],
+                self.redis.publish(CHANNEL, json.dumps(envelope, ensure_ascii=False)),
+            )
         except Exception:
             logger.warning("Redis realtime publish failed", exc_info=True)
             return delivered_locally
-        return True
+        return delivered_locally or subscriber_count > 0
 
     async def listen(self) -> None:
         if self.redis is None:

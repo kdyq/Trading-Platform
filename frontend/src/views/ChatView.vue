@@ -454,7 +454,7 @@ onUnmounted(() => {
             @keydown.enter="handleComposerEnter"
           />
           <UiButton type="submit" :disabled="!draft.trim()">发送</UiButton>
-          <p>请勿发送身份证、验证码或支付密码；平台客服不会在聊天中索要敏感信息。</p>
+          <p>请勿提前转账，尽量在平台内沟通并保留争议证据。请勿发送身份证、验证码或支付密码。</p>
         </form>
       </article>
 

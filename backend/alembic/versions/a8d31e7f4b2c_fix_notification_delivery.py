@@ -25,6 +25,15 @@ def upgrade() -> None:
         "notification_delivery_attempts",
         sa.Column("next_retry_at", sa.DateTime(timezone=True), nullable=True),
     )
+    op.execute(
+        sa.text(
+            """
+            UPDATE notification_delivery_attempts
+            SET next_retry_at = now()
+            WHERE status IN ('pending', 'failed') AND next_retry_at IS NULL
+            """
+        )
+    )
     op.create_index(
         "ix_notification_attempts_retry",
         "notification_delivery_attempts",

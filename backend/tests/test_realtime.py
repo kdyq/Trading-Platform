@@ -12,7 +12,9 @@ from app.core.exceptions import AppError
 from app.main import create_app
 from app.services.realtime import (
     InMemoryChatMessageLimiter,
+    RealtimeHub,
     RedisChatMessageLimiter,
+    RedisRealtimePublisher,
     RedisWebSocketTicketStore,
 )
 
@@ -38,6 +40,11 @@ class MemoryTicketRedis:
 class FailingTicketRedis(MemoryTicketRedis):
     async def set(self, key: str, value: str, **options: Any) -> bool:
         raise ConnectionError("redis unavailable")
+
+
+class NoSubscriberRedis:
+    async def publish(self, channel: str, payload: str) -> int:
+        return 0
 
     async def eval(self, script: str, key_count: int, key: str) -> str | None:
         raise ConnectionError("redis unavailable")
@@ -99,6 +106,15 @@ async def test_configured_redis_limiter_preserves_rest_writes_with_local_fallbac
 
     assert limited.value.status_code == 429
     assert limited.value.code == "chat_rate_limited"
+
+
+@pytest.mark.anyio
+async def test_realtime_publish_without_local_or_redis_subscribers_is_not_delivered() -> None:
+    publisher = RedisRealtimePublisher(RealtimeHub(), cast(Redis, NoSubscriberRedis()))
+
+    delivered = await publisher.publish((uuid4(),), {"type": "notification.created"})
+
+    assert delivered is False
 
 
 def test_websocket_requires_single_use_ticket_and_answers_heartbeat() -> None:

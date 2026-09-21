@@ -344,3 +344,13 @@ async def test_message_rejects_more_than_five_links() -> None:
         )
     assert invalid.value.status_code == 422
     assert invalid.value.code == "too_many_message_links"
+
+    with pytest.raises(AppError) as punctuation_separated:
+        await service.send_message(
+            user_id=repository.buyer_id,
+            campus_verified=True,
+            conversation_id=repository.conversation_id,
+            client_message_id="message_links_002",
+            body=",".join(f"https://example.com/{index}" for index in range(6)),
+        )
+    assert punctuation_separated.value.code == "too_many_message_links"
