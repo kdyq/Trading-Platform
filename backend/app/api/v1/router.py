@@ -8,6 +8,7 @@ from app.api.v1.routes.chat import router as chat_router
 from app.api.v1.routes.favorites import router as favorites_router
 from app.api.v1.routes.health import router as health_router
 from app.api.v1.routes.market import router as market_router
+from app.api.v1.routes.orders import router as orders_router
 from app.api.v1.routes.product_images import router as product_images_router
 from app.api.v1.routes.seller_products import router as seller_products_router
 
@@ -20,6 +21,7 @@ api_router.include_router(campus_router, prefix="/campus", tags=["campus"])
 api_router.include_router(catalog_router, prefix="/catalog", tags=["catalog"])
 api_router.include_router(chat_router, prefix="/chat", tags=["chat"])
 api_router.include_router(market_router, prefix="/market", tags=["market"])
+api_router.include_router(orders_router, prefix="/orders", tags=["orders"])
 api_router.include_router(product_images_router, prefix="/product-images", tags=["product-images"])
 api_router.include_router(
     seller_products_router, prefix="/seller/products", tags=["seller-products"]

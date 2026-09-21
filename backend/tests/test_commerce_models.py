@@ -49,6 +49,7 @@ def test_required_order_states_exist() -> None:
         "pending_seller_confirmation",
         "accepted",
         "scheduled",
+        "seller_delivered",
         "completed",
         "cancelled",
         "expired",

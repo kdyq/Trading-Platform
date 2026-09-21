@@ -17,6 +17,7 @@ from app.repositories.identity import (
     SqlAlchemyIdentityRepository,
 )
 from app.repositories.market import MarketRepository, SqlAlchemyMarketRepository
+from app.repositories.orders import OrderRepository, SqlAlchemyOrderRepository
 from app.repositories.product_images import (
     ProductImageUploadRepository,
     SqlAlchemyProductImageUploadRepository,
@@ -46,6 +47,7 @@ from app.services.mailer import (
 )
 from app.services.market import MarketService
 from app.services.notifications import NotificationDeliveryCoordinator
+from app.services.orders import OrderService
 from app.services.private_storage import PrivateAppealStorage
 from app.services.product_images import ProductImageProcessor, ProductImageUploadService
 from app.services.product_storage import LocalObjectStorage
@@ -88,6 +90,12 @@ def get_market_repository(
     session: Annotated[AsyncSession, Depends(get_database_session)],
 ) -> MarketRepository:
     return SqlAlchemyMarketRepository(session)
+
+
+def get_order_repository(
+    session: Annotated[AsyncSession, Depends(get_database_session)],
+) -> OrderRepository:
+    return SqlAlchemyOrderRepository(session)
 
 
 def get_catalog_repository(
@@ -243,6 +251,12 @@ def get_market_service(
     repository: Annotated[MarketRepository, Depends(get_market_repository)],
 ) -> MarketService:
     return MarketService(repository)
+
+
+def get_order_service(
+    repository: Annotated[OrderRepository, Depends(get_order_repository)],
+) -> OrderService:
+    return OrderService(repository)
 
 
 def get_catalog_service(

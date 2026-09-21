@@ -47,7 +47,17 @@ from app.models.notification import (
     NotificationDeliveryAttempt,
     NotificationPreference,
 )
-from app.models.trade import CreditEventType, CreditLedger, Order, OrderEvent, OrderStatus, Review
+from app.models.trade import (
+    CreditEventType,
+    CreditLedger,
+    MeetingProposalStatus,
+    Order,
+    OrderCommand,
+    OrderEvent,
+    OrderMeetingProposal,
+    OrderStatus,
+    Review,
+)
 
 __all__ = [
     "Base",
@@ -69,8 +79,11 @@ __all__ = [
     "ModerationRecord",
     "ModerationTargetType",
     "Order",
+    "OrderCommand",
     "OrderEvent",
+    "OrderMeetingProposal",
     "OrderStatus",
+    "MeetingProposalStatus",
     "Notification",
     "NotificationDeliveryAttempt",
     "NotificationPreference",
