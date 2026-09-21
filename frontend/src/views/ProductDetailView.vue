@@ -55,7 +55,7 @@ const galleryImages = computed(() => {
 
 const isOwner = computed(() => auth.user?.id === product.value?.seller.id)
 const actionDisabled = computed(
-  () => !product.value || isOwner.value || product.value.status !== 'on_sale',
+  () => !product.value || isOwner.value || product.value.status === 'sold',
 )
 const favoriteDisabled = computed(
   () => !product.value || isOwner.value || product.value.status === 'sold',
@@ -63,7 +63,6 @@ const favoriteDisabled = computed(
 const disabledReason = computed(() => {
   if (isOwner.value) return '这是你发布的商品'
   if (product.value?.status === 'sold') return '商品已售出'
-  if (product.value?.status === 'reserved') return '商品已被预订'
   return ''
 })
 const gateTitle = computed(() => {

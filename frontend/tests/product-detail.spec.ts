@@ -147,6 +147,22 @@ describe('product detail', () => {
     wrapper.unmount()
   })
 
+  it('keeps contact available for a reserved product with retained chat history', async () => {
+    const { wrapper } = await renderDetail({ ...product, status: 'reserved' })
+    useAuthStore().applySession('token', {
+      id: 'buyer-1',
+      login_email: 'buyer@example.edu.cn',
+      display_name: '买家',
+      status: 'active',
+      campus_verification_status: 'verified',
+    })
+    await wrapper.vm.$nextTick()
+    expect(wrapper.get('.product-main-actions .ui-button-primary').attributes('disabled')).toBe(
+      undefined,
+    )
+    wrapper.unmount()
+  })
+
   it('uses one generic public state for missing and non-public products', async () => {
     const { wrapper } = await renderDetail(
       { code: 'product_not_found', message: '商品不存在或不可见' },

@@ -527,6 +527,7 @@ class SqlAlchemyChatRepository:
                     notification_id=notification.id,
                     attempt_no=1,
                     status="pending",
+                    next_retry_at=datetime.now(UTC),
                 )
             )
         return notification

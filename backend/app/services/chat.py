@@ -1,6 +1,8 @@
 import base64
 import binascii
 import json
+import re
+import unicodedata
 from datetime import datetime
 from uuid import UUID
 
@@ -26,6 +28,9 @@ from app.services.realtime import (
     NullRealtimePublisher,
     RealtimePublisher,
 )
+
+LINK_PATTERN = re.compile(r"(?i)\b(?:https?://|www\.)\S+")
+MAX_MESSAGE_LINKS = 5
 
 
 class ChatService:
@@ -119,11 +124,20 @@ class ChatService:
         cleaned = body.strip()
         if not cleaned:
             raise AppError(status_code=422, code="empty_message", message="消息内容不能为空")
-        if any(ord(character) < 32 and character not in "\n\r\t" for character in cleaned):
+        if any(
+            unicodedata.category(character) == "Cc" and character not in "\n\r\t"
+            for character in cleaned
+        ):
             raise AppError(
                 status_code=422,
                 code="invalid_message_body",
                 message="消息包含不支持的控制字符",
+            )
+        if len(LINK_PATTERN.findall(cleaned)) > MAX_MESSAGE_LINKS:
+            raise AppError(
+                status_code=422,
+                code="too_many_message_links",
+                message=f"单条消息最多包含 {MAX_MESSAGE_LINKS} 个链接",
             )
         existing = await self.repository.get_message_by_client_key(user_id, client_message_id)
         if existing is not None:

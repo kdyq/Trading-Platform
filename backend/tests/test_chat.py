@@ -312,7 +312,8 @@ async def test_block_stops_new_messages_and_risk_hook_records_without_exposing_f
 
 
 @pytest.mark.anyio
-async def test_message_rejects_database_unsafe_control_characters() -> None:
+@pytest.mark.parametrize("control", ["\0", "\x7f", "\x85"])
+async def test_message_rejects_database_unsafe_control_characters(control: str) -> None:
     repository = FakeChatRepository()
     service = ChatService(repository)
 
@@ -322,7 +323,24 @@ async def test_message_rejects_database_unsafe_control_characters() -> None:
             campus_verified=True,
             conversation_id=repository.conversation_id,
             client_message_id="message_control_001",
-            body="包含空字符\0的消息",
+            body=f"包含控制字符{control}的消息",
         )
     assert invalid.value.status_code == 422
     assert invalid.value.code == "invalid_message_body"
+
+
+@pytest.mark.anyio
+async def test_message_rejects_more_than_five_links() -> None:
+    repository = FakeChatRepository()
+    service = ChatService(repository)
+
+    with pytest.raises(AppError) as invalid:
+        await service.send_message(
+            user_id=repository.buyer_id,
+            campus_verified=True,
+            conversation_id=repository.conversation_id,
+            client_message_id="message_links_001",
+            body=" ".join(f"https://example.com/{index}" for index in range(6)),
+        )
+    assert invalid.value.status_code == 422
+    assert invalid.value.code == "too_many_message_links"

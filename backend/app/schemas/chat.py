@@ -1,3 +1,5 @@
+import re
+import unicodedata
 from datetime import datetime
 from decimal import Decimal
 from typing import Literal
@@ -34,8 +36,13 @@ class MessageSend(BaseModel):
     @field_validator("body")
     @classmethod
     def reject_control_characters(cls, value: str) -> str:
-        if any(ord(character) < 32 and character not in "\n\r\t" for character in value):
+        if any(
+            unicodedata.category(character) == "Cc" and character not in "\n\r\t"
+            for character in value
+        ):
             raise ValueError("消息包含不支持的控制字符")
+        if len(re.findall(r"(?i)\b(?:https?://|www\.)\S+", value)) > 5:
+            raise ValueError("单条消息最多包含 5 个链接")
         return value
 
 

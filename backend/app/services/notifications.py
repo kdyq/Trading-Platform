@@ -21,10 +21,12 @@ class NotificationDeliveryCoordinator:
         publisher: RealtimePublisher,
         *,
         maximum_attempts: int = 5,
+        lease_seconds: int = 30,
     ) -> None:
         self.session_factory = session_factory
         self.publisher = publisher
         self.maximum_attempts = maximum_attempts
+        self.lease_seconds = lease_seconds
 
     @staticmethod
     def payload(notification: Notification) -> dict[str, Any]:
@@ -49,6 +51,31 @@ class NotificationDeliveryCoordinator:
         payload: dict[str, Any],
         *,
         attempt_no: int = 1,
+    ) -> None:
+        now = datetime.now(UTC)
+        async with transaction_scope(self.session_factory) as session:
+            attempt = await session.scalar(
+                select(NotificationDeliveryAttempt)
+                .where(
+                    NotificationDeliveryAttempt.notification_id == notification_id,
+                    NotificationDeliveryAttempt.attempt_no == attempt_no,
+                    NotificationDeliveryAttempt.status == "pending",
+                    NotificationDeliveryAttempt.next_retry_at.is_not(None),
+                    NotificationDeliveryAttempt.next_retry_at <= now,
+                )
+                .with_for_update()
+            )
+            if attempt is None:
+                return
+            attempt.next_retry_at = now + timedelta(seconds=self.lease_seconds)
+        await self._publish_claimed(notification_id, recipient_id, payload, attempt_no)
+
+    async def _publish_claimed(
+        self,
+        notification_id: UUID,
+        recipient_id: UUID,
+        payload: dict[str, Any],
+        attempt_no: int,
     ) -> None:
         delivered = False
         try:
@@ -92,26 +119,34 @@ class NotificationDeliveryCoordinator:
                 select(NotificationDeliveryAttempt, Notification)
                 .join(Notification, Notification.id == NotificationDeliveryAttempt.notification_id)
                 .where(
-                    NotificationDeliveryAttempt.status == "failed",
+                    NotificationDeliveryAttempt.status.in_(("pending", "failed")),
                     NotificationDeliveryAttempt.next_retry_at.is_not(None),
                     NotificationDeliveryAttempt.next_retry_at <= now,
-                    NotificationDeliveryAttempt.attempt_no < self.maximum_attempts,
+                    (
+                        (NotificationDeliveryAttempt.status == "pending")
+                        | (NotificationDeliveryAttempt.attempt_no < self.maximum_attempts)
+                    ),
                 )
                 .order_by(NotificationDeliveryAttempt.next_retry_at)
                 .limit(limit)
                 .with_for_update(skip_locked=True)
             )
             for previous, notification in rows:
-                attempt_no = previous.attempt_no + 1
-                session.add(
-                    NotificationDeliveryAttempt(
-                        id=uuid4(),
-                        notification_id=notification.id,
-                        attempt_no=attempt_no,
-                        status="pending",
+                if previous.status == "failed":
+                    attempt_no = previous.attempt_no + 1
+                    session.add(
+                        NotificationDeliveryAttempt(
+                            id=uuid4(),
+                            notification_id=notification.id,
+                            attempt_no=attempt_no,
+                            status="pending",
+                            next_retry_at=now + timedelta(seconds=self.lease_seconds),
+                        )
                     )
-                )
-                previous.next_retry_at = None
+                    previous.next_retry_at = None
+                else:
+                    attempt_no = previous.attempt_no
+                    previous.next_retry_at = now + timedelta(seconds=self.lease_seconds)
                 queued.append(
                     (
                         notification.id,
@@ -121,7 +156,7 @@ class NotificationDeliveryCoordinator:
                     )
                 )
         for notification_id, recipient_id, payload, attempt_no in queued:
-            await self.deliver(notification_id, recipient_id, payload, attempt_no=attempt_no)
+            await self._publish_claimed(notification_id, recipient_id, payload, attempt_no)
         return len(queued)
 
     async def run(self, *, interval_seconds: float = 5) -> None:

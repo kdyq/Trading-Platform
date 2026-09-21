@@ -12,6 +12,7 @@ from app.core.exceptions import AppError
 from app.main import create_app
 from app.services.realtime import (
     InMemoryChatMessageLimiter,
+    RedisChatMessageLimiter,
     RedisWebSocketTicketStore,
 )
 
@@ -36,6 +37,9 @@ class MemoryTicketRedis:
 
 class FailingTicketRedis(MemoryTicketRedis):
     async def set(self, key: str, value: str, **options: Any) -> bool:
+        raise ConnectionError("redis unavailable")
+
+    async def eval(self, script: str, key_count: int, key: str) -> str | None:
         raise ConnectionError("redis unavailable")
 
 
@@ -79,6 +83,19 @@ async def test_local_message_limiter_rejects_burst_per_member_and_conversation()
     with pytest.raises(AppError) as limited:
         await limiter.check(user_id, conversation_id)
     assert limited.value.code == "chat_rate_limited"
+
+
+@pytest.mark.anyio
+async def test_configured_redis_limiter_fails_closed_when_shared_limit_is_unavailable() -> None:
+    limiter = RedisChatMessageLimiter(
+        cast(Redis, FailingTicketRedis()), InMemoryChatMessageLimiter()
+    )
+
+    with pytest.raises(AppError) as unavailable:
+        await limiter.check(uuid4(), uuid4())
+
+    assert unavailable.value.status_code == 503
+    assert unavailable.value.code == "chat_rate_limit_unavailable"
 
 
 def test_websocket_requires_single_use_ticket_and_answers_heartbeat() -> None:

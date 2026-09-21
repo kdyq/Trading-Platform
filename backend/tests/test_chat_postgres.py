@@ -162,7 +162,11 @@ async def _exercise_chat_repository(database_url: str) -> None:
                     NotificationDeliveryAttempt.notification_id == notification.id
                 )
             )
-            assert attempt is not None and attempt.status == "pending"
+            assert (
+                attempt is not None
+                and attempt.status == "pending"
+                and attempt.next_retry_at is not None
+            )
             other_recipient = await repository.create_notification_event(
                 recipient_id=seller_id,
                 event_key=f"shared-event:{latest_message.id}",
@@ -183,6 +187,15 @@ async def _exercise_chat_repository(database_url: str) -> None:
             )
             assert other_recipient is not None and buyer_recipient is not None
             assert other_recipient.id != buyer_recipient.id
+            await session.execute(
+                update(NotificationDeliveryAttempt)
+                .where(
+                    NotificationDeliveryAttempt.notification_id.in_(
+                        (other_recipient.id, buyer_recipient.id)
+                    )
+                )
+                .values(next_retry_at=None)
+            )
             assert await repository.unread_notification_count(buyer_id) == 2
             assert await repository.mark_notification_read(buyer_id, notification.id) is not None
             assert await repository.mark_all_notifications_read(buyer_id) == 1
@@ -209,19 +222,34 @@ async def _exercise_chat_repository(database_url: str) -> None:
             await repository.unblock_user(buyer_id, seller_id)
             assert not await repository.blocked_between(buyer_id, seller_id)
 
-        delivery = NotificationDeliveryCoordinator(
+        recovery = NotificationDeliveryCoordinator(
             factory,
-            SequencePublisher([False, True]),
+            SequencePublisher([True]),
         )
+        assert await recovery.retry_due() == 1
+        async with factory.begin() as session:
+            recovered = await session.scalar(
+                select(NotificationDeliveryAttempt).where(
+                    NotificationDeliveryAttempt.notification_id == notification.id
+                )
+            )
+            assert recovered is not None and recovered.status == "delivered"
+            await session.execute(
+                update(NotificationDeliveryAttempt)
+                .where(NotificationDeliveryAttempt.notification_id == buyer_recipient.id)
+                .values(next_retry_at=func.now())
+            )
+
+        delivery = NotificationDeliveryCoordinator(factory, SequencePublisher([False, True]))
         await delivery.deliver(
-            notification.id,
+            buyer_recipient.id,
             buyer_id,
-            delivery.payload(notification),
+            delivery.payload(buyer_recipient),
         )
         async with factory.begin() as session:
             await session.execute(
                 update(NotificationDeliveryAttempt)
-                .where(NotificationDeliveryAttempt.notification_id == notification.id)
+                .where(NotificationDeliveryAttempt.notification_id == buyer_recipient.id)
                 .values(next_retry_at=func.now())
             )
         assert await delivery.retry_due() == 1
@@ -229,7 +257,7 @@ async def _exercise_chat_repository(database_url: str) -> None:
             delivery_states = list(
                 await session.scalars(
                     select(NotificationDeliveryAttempt.status)
-                    .where(NotificationDeliveryAttempt.notification_id == notification.id)
+                    .where(NotificationDeliveryAttempt.notification_id == buyer_recipient.id)
                     .order_by(NotificationDeliveryAttempt.attempt_no)
                 )
             )
