@@ -67,6 +67,7 @@ class NotificationDeliveryCoordinator:
             )
             if attempt is None:
                 return
+            attempt.status = "processing"
             attempt.next_retry_at = now + timedelta(seconds=self.lease_seconds)
         await self._publish_claimed(notification_id, recipient_id, payload, attempt_no)
 
@@ -89,7 +90,7 @@ class NotificationDeliveryCoordinator:
                 .where(
                     NotificationDeliveryAttempt.notification_id == notification_id,
                     NotificationDeliveryAttempt.attempt_no == attempt_no,
-                    NotificationDeliveryAttempt.status == "pending",
+                    NotificationDeliveryAttempt.status == "processing",
                 )
                 .with_for_update()
             )
@@ -119,34 +120,41 @@ class NotificationDeliveryCoordinator:
                 select(NotificationDeliveryAttempt, Notification)
                 .join(Notification, Notification.id == NotificationDeliveryAttempt.notification_id)
                 .where(
-                    NotificationDeliveryAttempt.status.in_(("pending", "failed")),
+                    NotificationDeliveryAttempt.status.in_(("pending", "processing", "failed")),
                     NotificationDeliveryAttempt.next_retry_at.is_not(None),
                     NotificationDeliveryAttempt.next_retry_at <= now,
-                    (
-                        (NotificationDeliveryAttempt.status == "pending")
-                        | (NotificationDeliveryAttempt.attempt_no < self.maximum_attempts)
-                    ),
                 )
                 .order_by(NotificationDeliveryAttempt.next_retry_at)
                 .limit(limit)
                 .with_for_update(skip_locked=True)
             )
             for previous, notification in rows:
-                if previous.status == "failed":
+                if previous.status == "pending":
+                    attempt_no = previous.attempt_no
+                    previous.status = "processing"
+                    previous.next_retry_at = now + timedelta(seconds=self.lease_seconds)
+                elif previous.attempt_no >= self.maximum_attempts:
+                    previous.status = "failed"
+                    previous.error_code = "delivery_lease_expired"
+                    previous.detail = "Delivery lease expired at the retry limit."
+                    previous.next_retry_at = None
+                    continue
+                else:
                     attempt_no = previous.attempt_no + 1
+                    previous.status = "failed"
+                    if previous.error_code is None:
+                        previous.error_code = "delivery_lease_expired"
+                        previous.detail = "Delivery lease expired before completion."
                     session.add(
                         NotificationDeliveryAttempt(
                             id=uuid4(),
                             notification_id=notification.id,
                             attempt_no=attempt_no,
-                            status="pending",
+                            status="processing",
                             next_retry_at=now + timedelta(seconds=self.lease_seconds),
                         )
                     )
                     previous.next_retry_at = None
-                else:
-                    attempt_no = previous.attempt_no
-                    previous.next_retry_at = now + timedelta(seconds=self.lease_seconds)
                 queued.append(
                     (
                         notification.id,

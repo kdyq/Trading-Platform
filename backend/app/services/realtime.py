@@ -142,12 +142,9 @@ class RedisChatMessageLimiter:
                 ),
             )
         except Exception:
-            logger.warning("Redis chat rate limit unavailable", exc_info=True)
-            raise AppError(
-                status_code=503,
-                code="chat_rate_limit_unavailable",
-                message="消息发送暂不可用，请稍后重试",
-            ) from None
+            logger.warning("Redis chat rate limit failed; using local fallback", exc_info=True)
+            await self.fallback.check(user_id, conversation_id)
+            return
         if count > self.maximum:
             raise AppError(status_code=429, code="chat_rate_limited", message="消息发送过于频繁")
 

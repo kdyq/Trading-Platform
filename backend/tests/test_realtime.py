@@ -86,16 +86,19 @@ async def test_local_message_limiter_rejects_burst_per_member_and_conversation()
 
 
 @pytest.mark.anyio
-async def test_configured_redis_limiter_fails_closed_when_shared_limit_is_unavailable() -> None:
+async def test_configured_redis_limiter_preserves_rest_writes_with_local_fallback() -> None:
     limiter = RedisChatMessageLimiter(
-        cast(Redis, FailingTicketRedis()), InMemoryChatMessageLimiter()
+        cast(Redis, FailingTicketRedis()),
+        InMemoryChatMessageLimiter(maximum=1, window_seconds=60),
     )
+    user_id, conversation_id = uuid4(), uuid4()
 
-    with pytest.raises(AppError) as unavailable:
-        await limiter.check(uuid4(), uuid4())
+    await limiter.check(user_id, conversation_id)
+    with pytest.raises(AppError) as limited:
+        await limiter.check(user_id, conversation_id)
 
-    assert unavailable.value.status_code == 503
-    assert unavailable.value.code == "chat_rate_limit_unavailable"
+    assert limited.value.status_code == 429
+    assert limited.value.code == "chat_rate_limited"
 
 
 def test_websocket_requires_single_use_ticket_and_answers_heartbeat() -> None:

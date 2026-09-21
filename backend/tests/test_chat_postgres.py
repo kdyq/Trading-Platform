@@ -262,6 +262,27 @@ async def _exercise_chat_repository(database_url: str) -> None:
                 )
             )
             assert delivery_states == ["failed", "delivered"]
+
+        async with factory.begin() as session:
+            await session.execute(
+                update(NotificationDeliveryAttempt)
+                .where(NotificationDeliveryAttempt.notification_id == other_recipient.id)
+                .values(status="processing", attempt_no=5, next_retry_at=func.now())
+            )
+        exhausted = NotificationDeliveryCoordinator(factory, SequencePublisher([]))
+        assert await exhausted.retry_due() == 0
+        async with factory.begin() as session:
+            terminal = await session.scalar(
+                select(NotificationDeliveryAttempt).where(
+                    NotificationDeliveryAttempt.notification_id == other_recipient.id
+                )
+            )
+            assert (
+                terminal is not None
+                and terminal.status == "failed"
+                and terminal.next_retry_at is None
+                and terminal.error_code == "delivery_lease_expired"
+            )
     finally:
         await engine.dispose()
         async with admin_engine.begin() as connection:
