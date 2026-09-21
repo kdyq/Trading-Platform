@@ -132,6 +132,13 @@ export async function readNotification(accessToken: string, notificationId: stri
   })
 }
 
+export async function readAllNotifications(accessToken: string) {
+  return requestJson<{ updated_count: number }>('/api/v1/chat/notifications/read-all', {
+    method: 'PUT',
+    accessToken,
+  })
+}
+
 export async function getNotificationPreferences(accessToken: string) {
   return requestJson<NotificationPreferences>('/api/v1/chat/notification-preferences', {
     accessToken,

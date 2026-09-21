@@ -10,7 +10,7 @@ from app.models.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
 class Notification(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "notifications"
     __table_args__ = (
-        UniqueConstraint("event_key", name="uq_notifications_event_key"),
+        UniqueConstraint("user_id", "event_key", name="uq_notifications_user_event_key"),
         Index("ix_notifications_user_created", "user_id", "created_at"),
         Index("ix_notifications_user_unread", "user_id", "read_at"),
     )
@@ -42,6 +42,7 @@ class NotificationDeliveryAttempt(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         UniqueConstraint("notification_id", "attempt_no", name="uq_notification_attempt_number"),
         CheckConstraint("attempt_no > 0", name="positive_attempt_number"),
         Index("ix_notification_attempts_status", "status", "created_at"),
+        Index("ix_notification_attempts_retry", "status", "next_retry_at"),
     )
 
     notification_id: Mapped[UUID] = mapped_column(
@@ -52,3 +53,4 @@ class NotificationDeliveryAttempt(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     error_code: Mapped[str | None] = mapped_column(String(64))
     detail: Mapped[str | None] = mapped_column(Text)
     delivered_at: Mapped[datetime | None]
+    next_retry_at: Mapped[datetime | None]

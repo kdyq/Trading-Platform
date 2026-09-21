@@ -293,6 +293,27 @@ def run() -> None:
                 "卖家消息：可以，带上校园卡", exact=True
             ).wait_for()
 
+            buyer_composer = buyer_page.get_by_placeholder(
+                "输入消息，建议只在校内公共区域当面交易"
+            )
+            buyer_composer.fill("键盘回车发送")
+            buyer_composer.press("Enter")
+            seller_page.locator(".thread-pane").get_by_text(
+                "键盘回车发送", exact=True
+            ).wait_for()
+
+            seller_composer = seller_page.get_by_placeholder(
+                "输入消息，建议只在校内公共区域当面交易"
+            )
+            seller_composer.fill("第一行")
+            seller_composer.press("Shift+Enter")
+            seller_composer.type("第二行")
+            assert seller_composer.input_value() == "第一行\n第二行"
+            seller_composer.press("Enter")
+            buyer_page.locator(".thread-pane").get_by_text(
+                "第一行\n第二行", exact=True
+            ).wait_for()
+
             buyer_page.close()
             seller_page.get_by_placeholder(
                 "输入消息，建议只在校内公共区域当面交易"
@@ -326,6 +347,10 @@ def run() -> None:
             buyer_page.goto(f"{BASE_URL}/notifications", wait_until="networkidle")
             buyer_page.get_by_text("收到一条新消息", exact=True).first.wait_for()
             assert "卖家消息：可以" not in buyer_page.locator("body").inner_text()
+            buyer_page.get_by_role("button", name="全部标为已读").click()
+            buyer_page.get_by_role("button", name="全部标为已读").wait_for(
+                state="detached"
+            )
             assert seller_page.evaluate(
                 "document.documentElement.scrollWidth <= window.innerWidth"
             )

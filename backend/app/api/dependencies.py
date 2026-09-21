@@ -45,6 +45,7 @@ from app.services.mailer import (
     VerificationMailer,
 )
 from app.services.market import MarketService
+from app.services.notifications import NotificationDeliveryCoordinator
 from app.services.private_storage import PrivateAppealStorage
 from app.services.product_images import ProductImageProcessor, ProductImageUploadService
 from app.services.product_storage import LocalObjectStorage
@@ -269,11 +270,13 @@ def get_websocket_ticket_store(request: Request) -> WebSocketTicketStore:
 
 
 def get_chat_service(
+    request: Request,
     repository: Annotated[ChatRepository, Depends(get_chat_repository)],
     publisher: Annotated[RealtimePublisher, Depends(get_realtime_publisher)],
     limiter: Annotated[ChatMessageLimiter, Depends(get_chat_message_limiter)],
 ) -> ChatService:
-    return ChatService(repository, publisher, limiter)
+    delivery = cast(NotificationDeliveryCoordinator | None, request.app.state.notification_delivery)
+    return ChatService(repository, publisher, limiter, delivery)
 
 
 def get_product_image_upload_service(

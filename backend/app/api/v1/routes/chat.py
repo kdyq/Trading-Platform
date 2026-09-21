@@ -20,6 +20,7 @@ from app.schemas.chat import (
     NotificationListResponse,
     NotificationPreferencesResponse,
     NotificationPreferenceUpdate,
+    NotificationReadAllResponse,
     NotificationResponse,
     ReadPositionResponse,
     ReadPositionUpdate,
@@ -92,6 +93,16 @@ async def notifications(
     service: Annotated[ChatService, Depends(get_chat_service)],
 ) -> NotificationListResponse:
     return await service.notifications(context.user.id)
+
+
+@router.put("/notifications/read-all", response_model=NotificationReadAllResponse)
+async def read_all_notifications(
+    context: Annotated[AuthContext, Depends(get_auth_context)],
+    service: Annotated[ChatService, Depends(get_chat_service)],
+) -> NotificationReadAllResponse:
+    return NotificationReadAllResponse(
+        updated_count=await service.mark_all_notifications_read(context.user.id)
+    )
 
 
 @router.put("/notifications/{notification_id}/read", response_model=NotificationResponse)

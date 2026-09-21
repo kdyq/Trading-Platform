@@ -3,7 +3,7 @@ import os
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import func, select, text
+from sqlalchemy import func, select, text, update
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.db.url import database_url_for_sqlalchemy, require_project_database
@@ -11,6 +11,15 @@ from app.models import Base
 from app.models.messaging import Conversation
 from app.models.notification import NotificationDeliveryAttempt
 from app.repositories.chat import SqlAlchemyChatRepository
+from app.services.notifications import NotificationDeliveryCoordinator
+
+
+class SequencePublisher:
+    def __init__(self, outcomes: list[bool]) -> None:
+        self.outcomes = outcomes
+
+    async def publish(self, user_ids, payload):  # type: ignore[no-untyped-def]
+        return self.outcomes.pop(0)
 
 
 def test_chat_repository_enforces_unique_conversations_and_message_state() -> None:
@@ -147,9 +156,36 @@ async def _exercise_chat_repository(database_url: str) -> None:
                     NotificationDeliveryAttempt.notification_id == notification.id
                 )
             )
-            assert attempts == 2
-            assert await repository.unread_notification_count(buyer_id) == 1
+            assert attempts == 1
+            attempt = await session.scalar(
+                select(NotificationDeliveryAttempt).where(
+                    NotificationDeliveryAttempt.notification_id == notification.id
+                )
+            )
+            assert attempt is not None and attempt.status == "pending"
+            other_recipient = await repository.create_notification_event(
+                recipient_id=seller_id,
+                event_key=f"shared-event:{latest_message.id}",
+                category="chat",
+                title="共享事件",
+                summary="同一事件可按收件人分别投递。",
+                target_type="conversation",
+                target_id=first.id,
+            )
+            buyer_recipient = await repository.create_notification_event(
+                recipient_id=buyer_id,
+                event_key=f"shared-event:{latest_message.id}",
+                category="chat",
+                title="共享事件",
+                summary="同一事件可按收件人分别投递。",
+                target_type="conversation",
+                target_id=first.id,
+            )
+            assert other_recipient is not None and buyer_recipient is not None
+            assert other_recipient.id != buyer_recipient.id
+            assert await repository.unread_notification_count(buyer_id) == 2
             assert await repository.mark_notification_read(buyer_id, notification.id) is not None
+            assert await repository.mark_all_notifications_read(buyer_id) == 1
             assert await repository.unread_notification_count(buyer_id) == 0
 
             report = await repository.report_message(
@@ -172,6 +208,32 @@ async def _exercise_chat_repository(database_url: str) -> None:
             assert await repository.list_blocked_user_ids(buyer_id) == [seller_id]
             await repository.unblock_user(buyer_id, seller_id)
             assert not await repository.blocked_between(buyer_id, seller_id)
+
+        delivery = NotificationDeliveryCoordinator(
+            factory,
+            SequencePublisher([False, True]),
+        )
+        await delivery.deliver(
+            notification.id,
+            buyer_id,
+            delivery.payload(notification),
+        )
+        async with factory.begin() as session:
+            await session.execute(
+                update(NotificationDeliveryAttempt)
+                .where(NotificationDeliveryAttempt.notification_id == notification.id)
+                .values(next_retry_at=func.now())
+            )
+        assert await delivery.retry_due() == 1
+        async with factory.begin() as session:
+            delivery_states = list(
+                await session.scalars(
+                    select(NotificationDeliveryAttempt.status)
+                    .where(NotificationDeliveryAttempt.notification_id == notification.id)
+                    .order_by(NotificationDeliveryAttempt.attempt_no)
+                )
+            )
+            assert delivery_states == ["failed", "delivered"]
     finally:
         await engine.dispose()
         async with admin_engine.begin() as connection:

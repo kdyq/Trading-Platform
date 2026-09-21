@@ -13,6 +13,7 @@ from app.core.exceptions import register_exception_handlers
 from app.core.logging import configure_logging
 from app.core.middleware import RequestContextMiddleware
 from app.db.session import create_database_engine, create_session_factory
+from app.services.notifications import NotificationDeliveryCoordinator
 from app.services.realtime import (
     InMemoryChatMessageLimiter,
     RealtimeHub,
@@ -40,9 +41,19 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.chat_message_limiter = RedisChatMessageLimiter(
         app.state.redis, InMemoryChatMessageLimiter()
     )
+    app.state.notification_delivery = (
+        NotificationDeliveryCoordinator(app.state.session_factory, app.state.realtime_publisher)
+        if app.state.session_factory is not None
+        else None
+    )
     listener_task = (
         asyncio.create_task(app.state.realtime_publisher.listen())
         if app.state.redis is not None
+        else None
+    )
+    notification_retry_task = (
+        asyncio.create_task(app.state.notification_delivery.run())
+        if app.state.notification_delivery is not None
         else None
     )
     yield
@@ -53,6 +64,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         listener_task.cancel()
         with suppress(asyncio.CancelledError):
             await listener_task
+    if notification_retry_task is not None:
+        notification_retry_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await notification_retry_task
     app.state.session_factory = None
     if engine is not None:
         await engine.dispose()

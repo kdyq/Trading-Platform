@@ -3,7 +3,7 @@ from decimal import Decimal
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class ConversationCreate(BaseModel):
@@ -30,6 +30,13 @@ class ConversationListResponse(BaseModel):
 class MessageSend(BaseModel):
     client_message_id: str = Field(min_length=8, max_length=64, pattern=r"^[A-Za-z0-9_-]+$")
     body: str = Field(min_length=1, max_length=2000)
+
+    @field_validator("body")
+    @classmethod
+    def reject_control_characters(cls, value: str) -> str:
+        if any(ord(character) < 32 and character not in "\n\r\t" for character in value):
+            raise ValueError("消息包含不支持的控制字符")
+        return value
 
 
 class ChatMessageResponse(BaseModel):
@@ -90,6 +97,10 @@ class NotificationResponse(BaseModel):
 class NotificationListResponse(BaseModel):
     items: list[NotificationResponse]
     unread_count: int = Field(ge=0)
+
+
+class NotificationReadAllResponse(BaseModel):
+    updated_count: int = Field(ge=0)
 
 
 class NotificationPreferencesResponse(BaseModel):

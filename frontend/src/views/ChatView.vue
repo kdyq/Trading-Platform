@@ -86,8 +86,7 @@ async function refreshConversations() {
 
 async function readLatest() {
   const latest = messages.value.at(-1)
-  if (!auth.accessToken || !selectedId.value || !latest || latest.sender_id === auth.user?.id)
-    return
+  if (!auth.accessToken || !selectedId.value || !latest) return
   try {
     await markConversationRead(auth.accessToken, selectedId.value, latest.id)
     const conversation = conversations.value.find((item) => item.id === selectedId.value)
@@ -172,6 +171,12 @@ async function submit() {
   await deliver(optimistic)
 }
 
+function handleComposerEnter(event: KeyboardEvent) {
+  if (event.shiftKey) return
+  event.preventDefault()
+  void submit()
+}
+
 async function blockCurrentUser() {
   if (!auth.accessToken || !selected.value) return
   if (!window.confirm(`屏蔽 ${selected.value.other_display_name}？之后双方都不能继续发送消息。`))
@@ -214,7 +219,8 @@ function closeSocket() {
 function scheduleReconnect() {
   if (stopped || reconnect) return
   connection.value = 'retrying'
-  const delay = Math.min(1000 * 2 ** reconnectAttempt, 15_000)
+  const baseDelay = Math.min(1000 * 2 ** reconnectAttempt, 15_000)
+  const delay = Math.round(baseDelay * (0.8 + Math.random() * 0.4))
   reconnectAttempt += 1
   reconnect = window.setTimeout(() => {
     reconnect = undefined
@@ -445,8 +451,7 @@ onUnmounted(() => {
             maxlength="2000"
             rows="2"
             placeholder="输入消息，建议只在校内公共区域当面交易"
-            @keydown.ctrl.enter="submit"
-            @keydown.meta.enter="submit"
+            @keydown.enter="handleComposerEnter"
           />
           <UiButton type="submit" :disabled="!draft.trim()">发送</UiButton>
           <p>请勿发送身份证、验证码或支付密码；平台客服不会在聊天中索要敏感信息。</p>

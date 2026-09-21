@@ -43,7 +43,7 @@ class UnavailableWebSocketTicketStore:
 
 
 class RedisWebSocketTicketStore:
-    def __init__(self, redis: Redis, *, ttl_seconds: int = 30) -> None:
+    def __init__(self, redis: Redis, *, ttl_seconds: int = 60) -> None:
         self._redis = redis
         self._ttl_seconds = ttl_seconds
 
@@ -53,7 +53,18 @@ class RedisWebSocketTicketStore:
 
     async def issue(self, user_id: UUID) -> tuple[str, int]:
         ticket = token_urlsafe(32)
-        await self._redis.set(self._key(ticket), str(user_id), ex=self._ttl_seconds, nx=True)
+        try:
+            created = await self._redis.set(
+                self._key(ticket), str(user_id), ex=self._ttl_seconds, nx=True
+            )
+        except Exception as exc:
+            raise AppError(
+                status_code=503,
+                code="realtime_unavailable",
+                message="实时通信暂不可用",
+            ) from exc
+        if not created:
+            raise AppError(status_code=503, code="realtime_unavailable", message="实时通信暂不可用")
         return ticket, self._ttl_seconds
 
     async def consume(self, ticket: str) -> UUID | None:
@@ -157,7 +168,7 @@ class RealtimeHub:
             if not sockets:
                 self._connections.pop(user_id, None)
 
-    async def send_user(self, user_id: UUID, payload: dict[str, Any]) -> None:
+    async def send_user(self, user_id: UUID, payload: dict[str, Any]) -> bool:
         async with self._lock:
             sockets = tuple(self._connections.get(user_id, ()))
         failed: list[WebSocket] = []
@@ -168,15 +179,16 @@ class RealtimeHub:
                 failed.append(websocket)
         for websocket in failed:
             await self.disconnect(user_id, websocket)
+        return bool(sockets) and len(failed) < len(sockets)
 
 
 class RealtimePublisher(Protocol):
-    async def publish(self, user_ids: tuple[UUID, ...], payload: dict[str, Any]) -> None: ...
+    async def publish(self, user_ids: tuple[UUID, ...], payload: dict[str, Any]) -> bool: ...
 
 
 class NullRealtimePublisher:
-    async def publish(self, user_ids: tuple[UUID, ...], payload: dict[str, Any]) -> None:
-        return None
+    async def publish(self, user_ids: tuple[UUID, ...], payload: dict[str, Any]) -> bool:
+        return False
 
 
 class RedisRealtimePublisher:
@@ -185,11 +197,12 @@ class RedisRealtimePublisher:
         self.redis = redis
         self.instance_id = str(uuid4())
 
-    async def publish(self, user_ids: tuple[UUID, ...], payload: dict[str, Any]) -> None:
+    async def publish(self, user_ids: tuple[UUID, ...], payload: dict[str, Any]) -> bool:
+        delivered_locally = False
         for user_id in set(user_ids):
-            await self.hub.send_user(user_id, payload)
+            delivered_locally = await self.hub.send_user(user_id, payload) or delivered_locally
         if self.redis is None:
-            return
+            return delivered_locally
         envelope = {
             "origin": self.instance_id,
             "user_ids": [str(user_id) for user_id in set(user_ids)],
@@ -199,6 +212,8 @@ class RedisRealtimePublisher:
             await self.redis.publish(CHANNEL, json.dumps(envelope, ensure_ascii=False))
         except Exception:
             logger.warning("Redis realtime publish failed", exc_info=True)
+            return delivered_locally
+        return True
 
     async def listen(self) -> None:
         if self.redis is None:

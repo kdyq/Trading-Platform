@@ -5,6 +5,7 @@ import { RouterLink } from 'vue-router'
 import {
   getNotificationPreferences,
   listNotifications,
+  readAllNotifications,
   readNotification,
   setNotificationPreference,
 } from '../api/chat'
@@ -50,6 +51,19 @@ async function markRead(item: NotificationItem) {
   Object.assign(item, updated)
 }
 
+async function markAllRead() {
+  if (!auth.accessToken || !notifications.value.some((item) => !item.read_at)) return
+  try {
+    await readAllNotifications(auth.accessToken)
+    const readAt = new Date().toISOString()
+    notifications.value.forEach((item) => {
+      if (!item.read_at) item.read_at = readAt
+    })
+  } catch (caught) {
+    error.value = caught instanceof Error ? caught.message : '全部标为已读失败'
+  }
+}
+
 async function toggle(category: keyof NotificationPreferences) {
   if (!auth.accessToken) return
   const previous = preferences.value[category]
@@ -81,6 +95,14 @@ onMounted(load)
         </label>
       </aside>
       <div class="notification-feed" :aria-busy="loading">
+        <button
+          v-if="notifications.some((item) => !item.read_at)"
+          class="read-all"
+          type="button"
+          @click="markAllRead"
+        >
+          全部标为已读
+        </button>
         <p v-if="loading">正在加载通知…</p>
         <p v-else-if="!notifications.length">暂无通知。</p>
         <article
@@ -133,6 +155,14 @@ onMounted(load)
   border-radius: 20px;
   background: white;
   box-shadow: var(--shadow);
+}
+.read-all {
+  justify-self: end;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  cursor: pointer;
+  font: inherit;
 }
 .preference-card {
   align-self: start;

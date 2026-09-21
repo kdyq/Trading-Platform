@@ -60,10 +60,12 @@ class FakeChatRepository:
     async def list_blocked_user_ids(self, blocker_id):  # type: ignore[no-untyped-def]
         return [self.seller_id] if self.blocked else []
 
-    async def list_conversations(self, user_id, limit):  # type: ignore[no-untyped-def]
+    async def list_conversations(  # type: ignore[no-untyped-def]
+        self, user_id, limit, *, conversation_id=None
+    ):
         if user_id not in {self.buyer_id, self.seller_id}:
             return []
-        return [
+        records = [
             ConversationRecord(
                 id=self.conversation_id,
                 product_id=self.product_id,
@@ -77,6 +79,7 @@ class FakeChatRepository:
                 unread_count=0,
             )
         ]
+        return [item for item in records if conversation_id in {None, item.id}]
 
     async def get_member_conversation(  # type: ignore[no-untyped-def]
         self, user_id, conversation_id, *, for_update=False
@@ -156,6 +159,9 @@ class FakeChatRepository:
 
     async def mark_notification_read(self, user_id, notification_id):  # type: ignore[no-untyped-def]
         return None
+
+    async def mark_all_notifications_read(self, user_id):  # type: ignore[no-untyped-def]
+        return 0
 
     async def notification_preferences(self, user_id):  # type: ignore[no-untyped-def]
         return {}
@@ -303,3 +309,20 @@ async def test_block_stops_new_messages_and_risk_hook_records_without_exposing_f
             body="仍然发送",
         )
     assert blocked.value.code == "chat_blocked"
+
+
+@pytest.mark.anyio
+async def test_message_rejects_database_unsafe_control_characters() -> None:
+    repository = FakeChatRepository()
+    service = ChatService(repository)
+
+    with pytest.raises(AppError) as invalid:
+        await service.send_message(
+            user_id=repository.buyer_id,
+            campus_verified=True,
+            conversation_id=repository.conversation_id,
+            client_message_id="message_control_001",
+            body="包含空字符\0的消息",
+        )
+    assert invalid.value.status_code == 422
+    assert invalid.value.code == "invalid_message_body"

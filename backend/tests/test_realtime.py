@@ -34,6 +34,11 @@ class MemoryTicketRedis:
         return None
 
 
+class FailingTicketRedis(MemoryTicketRedis):
+    async def set(self, key: str, value: str, **options: Any) -> bool:
+        raise ConnectionError("redis unavailable")
+
+
 def ticket_store() -> tuple[RedisWebSocketTicketStore, MemoryTicketRedis]:
     redis = MemoryTicketRedis()
     return RedisWebSocketTicketStore(cast(Redis, redis)), redis
@@ -46,11 +51,22 @@ async def test_websocket_ticket_is_short_lived_opaque_and_single_use() -> None:
 
     ticket, expires_in = await store.issue(user_id)
 
-    assert expires_in == 30
+    assert expires_in == 60
     assert str(user_id) not in ticket
     assert all(ticket not in key for key in redis.values)
     assert await store.consume(ticket) == user_id
     assert await store.consume(ticket) is None
+
+
+@pytest.mark.anyio
+async def test_ticket_issue_maps_redis_failure_to_stable_service_unavailable() -> None:
+    store = RedisWebSocketTicketStore(cast(Redis, FailingTicketRedis()))
+
+    with pytest.raises(AppError) as unavailable:
+        await store.issue(uuid4())
+
+    assert unavailable.value.status_code == 503
+    assert unavailable.value.code == "realtime_unavailable"
 
 
 @pytest.mark.anyio

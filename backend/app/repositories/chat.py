@@ -2,10 +2,10 @@ from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
-from typing import Protocol, cast
+from typing import Any, Protocol, cast
 from uuid import UUID, uuid4
 
-from sqlalchemy import case, delete, func, or_, select
+from sqlalchemy import case, delete, func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
@@ -55,7 +55,7 @@ class ChatRepository(Protocol):
     ) -> Conversation: ...
 
     async def list_conversations(
-        self, user_id: UUID, limit: int
+        self, user_id: UUID, limit: int, *, conversation_id: UUID | None = None
     ) -> Sequence[ConversationRecord]: ...
 
     async def get_member_conversation(
@@ -86,7 +86,7 @@ class ChatRepository(Protocol):
         body: str,
     ) -> MessageWriteResult: ...
 
-    def after_commit(self, callback: Callable[[], Awaitable[None] | None]) -> None: ...
+    def after_commit(self, callback: Callable[[], Awaitable[Any] | None]) -> None: ...
 
     async def mark_read(
         self, *, conversation_id: UUID, user_id: UUID, message: Message
@@ -131,6 +131,8 @@ class ChatRepository(Protocol):
     async def mark_notification_read(
         self, user_id: UUID, notification_id: UUID
     ) -> Notification | None: ...
+
+    async def mark_all_notifications_read(self, user_id: UUID) -> int: ...
 
     async def notification_preferences(self, user_id: UUID) -> dict[str, bool]: ...
 
@@ -192,7 +194,9 @@ class SqlAlchemyChatRepository:
         assert conversation is not None
         return conversation
 
-    async def list_conversations(self, user_id: UUID, limit: int) -> Sequence[ConversationRecord]:
+    async def list_conversations(
+        self, user_id: UUID, limit: int, *, conversation_id: UUID | None = None
+    ) -> Sequence[ConversationRecord]:
         other_user = aliased(User)
         read_at = (
             select(ConversationReadState.last_read_at)
@@ -242,7 +246,7 @@ class SqlAlchemyChatRepository:
             (Conversation.buyer_id == user_id, Conversation.seller_id),
             else_=Conversation.buyer_id,
         )
-        result = await self.session.execute(
+        query = (
             select(
                 Conversation.id,
                 Conversation.product_id,
@@ -261,12 +265,15 @@ class SqlAlchemyChatRepository:
                 Conversation.deleted_at.is_(None),
                 or_(Conversation.buyer_id == user_id, Conversation.seller_id == user_id),
             )
-            .order_by(
+        )
+        if conversation_id is not None:
+            query = query.where(Conversation.id == conversation_id)
+        result = await self.session.execute(
+            query.order_by(
                 Conversation.last_message_at.desc().nulls_last(),
                 Conversation.updated_at.desc(),
                 Conversation.id,
-            )
-            .limit(limit)
+            ).limit(limit)
         )
         return [ConversationRecord(**dict(row._mapping)) for row in result]
 
@@ -361,7 +368,7 @@ class SqlAlchemyChatRepository:
             await self.session.flush()
         return MessageWriteResult(message=message, created=inserted_id is not None)
 
-    def after_commit(self, callback: Callable[[], Awaitable[None] | None]) -> None:
+    def after_commit(self, callback: Callable[[], Awaitable[Any] | None]) -> None:
         callbacks = cast(
             list[Callable[[], Awaitable[None] | None]],
             self.session.info.setdefault("after_commit_callbacks", []),
@@ -492,7 +499,7 @@ class SqlAlchemyChatRepository:
         if enabled is False:
             return None
         notification_id = uuid4()
-        await self.session.execute(
+        inserted_id = await self.session.scalar(
             insert(Notification)
             .values(
                 id=notification_id,
@@ -504,34 +511,24 @@ class SqlAlchemyChatRepository:
                 target_type=target_type,
                 target_id=target_id,
             )
-            .on_conflict_do_nothing(constraint="uq_notifications_event_key")
+            .on_conflict_do_nothing(constraint="uq_notifications_user_event_key")
+            .returning(Notification.id)
         )
         notification = await self.session.scalar(
-            select(Notification).where(Notification.event_key == event_key)
+            select(Notification).where(
+                Notification.user_id == recipient_id, Notification.event_key == event_key
+            )
         )
         assert notification is not None
-        attempt_no = (
-            int(
-                await self.session.scalar(
-                    select(func.count(NotificationDeliveryAttempt.id)).where(
-                        NotificationDeliveryAttempt.notification_id == notification.id
-                    )
+        if inserted_id is not None:
+            await self.session.execute(
+                insert(NotificationDeliveryAttempt).values(
+                    id=uuid4(),
+                    notification_id=notification.id,
+                    attempt_no=1,
+                    status="pending",
                 )
-                or 0
             )
-            + 1
-        )
-        await self.session.execute(
-            insert(NotificationDeliveryAttempt)
-            .values(
-                id=uuid4(),
-                notification_id=notification.id,
-                attempt_no=attempt_no,
-                status="delivered",
-                delivered_at=datetime.now(UTC),
-            )
-            .on_conflict_do_nothing(constraint="uq_notification_attempt_number")
-        )
         return notification
 
     async def report_message(
@@ -606,6 +603,15 @@ class SqlAlchemyChatRepository:
             notification.read_at = datetime.now(UTC)
             await self.session.flush()
         return notification
+
+    async def mark_all_notifications_read(self, user_id: UUID) -> int:
+        result = await self.session.scalars(
+            update(Notification)
+            .where(Notification.user_id == user_id, Notification.read_at.is_(None))
+            .values(read_at=datetime.now(UTC))
+            .returning(Notification.id)
+        )
+        return len(result.all())
 
     async def notification_preferences(self, user_id: UUID) -> dict[str, bool]:
         result = await self.session.execute(

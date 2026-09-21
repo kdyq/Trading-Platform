@@ -2,7 +2,7 @@ import inspect
 import logging
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
-from typing import cast
+from typing import Any, cast
 
 from fastapi import Request
 from sqlalchemy.ext.asyncio import (
@@ -19,7 +19,7 @@ from app.db.url import (
 )
 
 logger = logging.getLogger(__name__)
-AfterCommitCallback = Callable[[], Awaitable[None] | None]
+AfterCommitCallback = Callable[[], Awaitable[Any] | None]
 
 
 def create_database_engine(database_url: str, *, schema: str | None = None) -> AsyncEngine:

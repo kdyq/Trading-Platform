@@ -19,6 +19,7 @@ from app.schemas.chat import (
     NotificationResponse,
     ReadPositionResponse,
 )
+from app.services.notifications import NotificationDeliveryCoordinator
 from app.services.realtime import (
     ChatMessageLimiter,
     NullChatMessageLimiter,
@@ -33,10 +34,12 @@ class ChatService:
         repository: ChatRepository,
         publisher: RealtimePublisher | None = None,
         limiter: ChatMessageLimiter | None = None,
+        notification_delivery: NotificationDeliveryCoordinator | None = None,
     ) -> None:
         self.repository = repository
         self.publisher = publisher or NullRealtimePublisher()
         self.limiter = limiter or NullChatMessageLimiter()
+        self.notification_delivery = notification_delivery
 
     async def create_conversation(
         self, *, user_id: UUID, campus_verified: bool, product_id: UUID
@@ -59,8 +62,12 @@ class ChatService:
         conversation = await self.repository.create_or_get_conversation(
             product=product, buyer_id=user_id
         )
-        records = await self.repository.list_conversations(user_id, 50)
-        record = next(item for item in records if item.id == conversation.id)
+        records = await self.repository.list_conversations(
+            user_id, 1, conversation_id=conversation.id
+        )
+        if not records:
+            raise AppError(status_code=404, code="conversation_not_found", message="会话不存在")
+        record = records[0]
         return ConversationSummary.model_validate(record, from_attributes=True)
 
     async def list_conversations(self, user_id: UUID) -> ConversationListResponse:
@@ -112,6 +119,12 @@ class ChatService:
         cleaned = body.strip()
         if not cleaned:
             raise AppError(status_code=422, code="empty_message", message="消息内容不能为空")
+        if any(ord(character) < 32 and character not in "\n\r\t" for character in cleaned):
+            raise AppError(
+                status_code=422,
+                code="invalid_message_body",
+                message="消息包含不支持的控制字符",
+            )
         existing = await self.repository.get_message_by_client_key(user_id, client_message_id)
         if existing is not None:
             if existing.conversation_id != conversation.id or existing.body != cleaned:
@@ -158,9 +171,19 @@ class ChatService:
                         notification, from_attributes=True
                     ).model_dump(mode="json"),
                 }
-                self.repository.after_commit(
-                    lambda: self.publisher.publish((recipient_id,), notification_payload)
-                )
+                if self.notification_delivery is not None:
+                    delivery = self.notification_delivery
+                    self.repository.after_commit(
+                        lambda: delivery.deliver(
+                            notification.id,
+                            recipient_id,
+                            notification_payload,
+                        )
+                    )
+                else:
+                    self.repository.after_commit(
+                        lambda: self.publisher.publish((recipient_id,), notification_payload)
+                    )
         return response
 
     async def mark_read(
@@ -256,6 +279,9 @@ class ChatService:
         if notification is None:
             raise AppError(status_code=404, code="notification_not_found", message="通知不存在")
         return NotificationResponse.model_validate(notification, from_attributes=True)
+
+    async def mark_all_notifications_read(self, user_id: UUID) -> int:
+        return await self.repository.mark_all_notifications_read(user_id)
 
     async def preferences(self, user_id: UUID) -> NotificationPreferencesResponse:
         values = await self.repository.notification_preferences(user_id)
