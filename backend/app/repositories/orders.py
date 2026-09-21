@@ -20,7 +20,14 @@ from app.models.notification import (
     NotificationDeliveryAttempt,
     NotificationPreference,
 )
-from app.models.trade import Order, OrderCommand, OrderEvent, OrderStatus
+from app.models.trade import (
+    MeetingProposalStatus,
+    Order,
+    OrderCommand,
+    OrderEvent,
+    OrderMeetingProposal,
+    OrderStatus,
+)
 
 
 class OrderRepository(Protocol):
@@ -41,6 +48,20 @@ class OrderRepository(Protocol):
     async def get_order(self, order_id: UUID, *, for_update: bool = False) -> Order | None: ...
 
     async def refresh_order(self, order: Order) -> None: ...
+
+    def add_meeting_proposal(self, proposal: OrderMeetingProposal) -> None: ...
+
+    async def get_meeting_proposal(
+        self, proposal_id: UUID, *, for_update: bool = False
+    ) -> OrderMeetingProposal | None: ...
+
+    async def refresh_meeting_proposal(self, proposal: OrderMeetingProposal) -> None: ...
+
+    async def supersede_other_proposals(self, order_id: UUID, proposal_id: UUID) -> None: ...
+
+    async def withdraw_pending_proposals(self, order_id: UUID) -> None: ...
+
+    async def claim_expired_pending(self, limit: int) -> Sequence[Order]: ...
 
     async def find_command(self, actor_id: UUID, client_action_id: str) -> OrderCommand | None: ...
 
@@ -64,6 +85,7 @@ class OrderRepository(Protocol):
         command: str,
         payload_hash: str,
         event: OrderEvent | None,
+        result_id: UUID | None = None,
     ) -> None: ...
 
     async def cancel_other_pending(
@@ -179,6 +201,59 @@ class SqlAlchemyOrderRepository:
         await self.session.flush()
         await self.session.refresh(order)
 
+    def add_meeting_proposal(self, proposal: OrderMeetingProposal) -> None:
+        self.session.add(proposal)
+
+    async def get_meeting_proposal(
+        self, proposal_id: UUID, *, for_update: bool = False
+    ) -> OrderMeetingProposal | None:
+        query = select(OrderMeetingProposal).where(OrderMeetingProposal.id == proposal_id)
+        if for_update:
+            query = query.with_for_update()
+        return cast(OrderMeetingProposal | None, await self.session.scalar(query))
+
+    async def refresh_meeting_proposal(self, proposal: OrderMeetingProposal) -> None:
+        await self.session.flush()
+        await self.session.refresh(proposal)
+
+    async def supersede_other_proposals(self, order_id: UUID, proposal_id: UUID) -> None:
+        await self.session.execute(
+            update(OrderMeetingProposal)
+            .where(
+                OrderMeetingProposal.order_id == order_id,
+                OrderMeetingProposal.id != proposal_id,
+                OrderMeetingProposal.status.in_(
+                    (MeetingProposalStatus.PENDING, MeetingProposalStatus.ACCEPTED)
+                ),
+            )
+            .values(status=MeetingProposalStatus.SUPERSEDED)
+        )
+
+    async def withdraw_pending_proposals(self, order_id: UUID) -> None:
+        await self.session.execute(
+            update(OrderMeetingProposal)
+            .where(
+                OrderMeetingProposal.order_id == order_id,
+                OrderMeetingProposal.status == MeetingProposalStatus.PENDING,
+            )
+            .values(status=MeetingProposalStatus.WITHDRAWN)
+        )
+
+    async def claim_expired_pending(self, limit: int) -> Sequence[Order]:
+        return list(
+            await self.session.scalars(
+                select(Order)
+                .where(
+                    Order.status == OrderStatus.PENDING_SELLER_CONFIRMATION,
+                    Order.expires_at.is_not(None),
+                    Order.expires_at <= datetime.now(UTC),
+                )
+                .order_by(Order.expires_at, Order.id)
+                .limit(limit)
+                .with_for_update(skip_locked=True)
+            )
+        )
+
     async def find_command(self, actor_id: UUID, client_action_id: str) -> OrderCommand | None:
         return cast(
             OrderCommand | None,
@@ -221,6 +296,7 @@ class SqlAlchemyOrderRepository:
         command: str,
         payload_hash: str,
         event: OrderEvent | None,
+        result_id: UUID | None = None,
     ) -> None:
         self.session.add(
             OrderCommand(
@@ -231,6 +307,7 @@ class SqlAlchemyOrderRepository:
                 command=command,
                 payload_hash=payload_hash,
                 event=event,
+                result_id=result_id,
             )
         )
 

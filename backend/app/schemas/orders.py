@@ -15,6 +15,28 @@ class OrderAction(BaseModel):
     client_action_id: str = Field(min_length=8, max_length=64, pattern=r"^[A-Za-z0-9_-]+$")
 
 
+class MeetingProposalCreate(OrderAction):
+    proposed_for: datetime
+    location_text: str = Field(min_length=2, max_length=200)
+
+
+class OrderCancel(OrderAction):
+    reason_code: str = Field(pattern=r"^(changed_mind|schedule_failed|item_issue|other)$")
+    note: str | None = Field(default=None, max_length=500)
+
+
+class MeetingProposalResponse(BaseModel):
+    id: UUID
+    order_id: UUID
+    proposer_id: UUID
+    proposed_for: datetime
+    location_text: str
+    status: str
+    buyer_confirmed_at: datetime | None
+    seller_confirmed_at: datetime | None
+    created_at: datetime
+
+
 class OrderResponse(BaseModel):
     id: UUID
     product_id: UUID

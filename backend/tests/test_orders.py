@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from types import SimpleNamespace
 from uuid import UUID, uuid4
@@ -8,8 +8,15 @@ import pytest
 from app.core.exceptions import AppError
 from app.models.catalog import ProductStatus
 from app.models.identity import CampusVerificationStatus
-from app.models.trade import Order, OrderCommand, OrderEvent, OrderStatus
-from app.schemas.orders import OrderCreate
+from app.models.trade import (
+    MeetingProposalStatus,
+    Order,
+    OrderCommand,
+    OrderEvent,
+    OrderMeetingProposal,
+    OrderStatus,
+)
+from app.schemas.orders import MeetingProposalCreate, OrderCancel, OrderCreate
 from app.services.orders import OrderService
 
 
@@ -36,6 +43,7 @@ class FakeOrderRepository:
         self.idempotency: dict[tuple[UUID, str], UUID] = {}
         self.commands: dict[tuple[UUID, str], OrderCommand] = {}
         self.events: list[OrderEvent] = []
+        self.proposals: dict[UUID, OrderMeetingProposal] = {}
         self.notifications: list[dict[str, object]] = []
 
     async def verified_campus_id(self, user_id):  # type: ignore[no-untyped-def]
@@ -69,6 +77,38 @@ class FakeOrderRepository:
 
     async def refresh_order(self, order):  # type: ignore[no-untyped-def]
         order.updated_at = datetime.now(UTC)
+
+    def add_meeting_proposal(self, proposal):  # type: ignore[no-untyped-def]
+        self.proposals[proposal.id] = proposal
+
+    async def get_meeting_proposal(self, proposal_id, *, for_update=False):  # type: ignore[no-untyped-def]
+        return self.proposals.get(proposal_id)
+
+    async def refresh_meeting_proposal(self, proposal):  # type: ignore[no-untyped-def]
+        now = datetime.now(UTC)
+        if proposal.created_at is None:
+            proposal.created_at = now
+        proposal.updated_at = now
+
+    async def supersede_other_proposals(self, order_id, proposal_id):  # type: ignore[no-untyped-def]
+        for proposal in self.proposals.values():
+            if proposal.order_id == order_id and proposal.id != proposal_id:
+                proposal.status = MeetingProposalStatus.SUPERSEDED
+
+    async def withdraw_pending_proposals(self, order_id):  # type: ignore[no-untyped-def]
+        for proposal in self.proposals.values():
+            if proposal.order_id == order_id and proposal.status == MeetingProposalStatus.PENDING:
+                proposal.status = MeetingProposalStatus.WITHDRAWN
+
+    async def claim_expired_pending(self, limit):  # type: ignore[no-untyped-def]
+        now = datetime.now(UTC)
+        return [
+            order
+            for order in self.orders.values()
+            if order.status == OrderStatus.PENDING_SELLER_CONFIRMATION
+            and order.expires_at is not None
+            and order.expires_at <= now
+        ][:limit]
 
     async def find_command(self, actor_id, client_action_id):  # type: ignore[no-untyped-def]
         return self.commands.get((actor_id, client_action_id))
@@ -197,3 +237,146 @@ async def test_seller_accepts_once_and_product_is_reserved() -> None:
             client_action_id="order_accept_002",
         )
     assert buyer_cannot_accept.value.code == "order_not_found"
+
+
+@pytest.mark.anyio
+async def test_participants_confirm_meeting_and_cancellation_restores_product() -> None:
+    repository = FakeOrderRepository()
+    service = OrderService(repository)
+    created = await service.create(
+        user_id=repository.buyer_id,
+        campus_status=CampusVerificationStatus.VERIFIED,
+        payload=OrderCreate(product_id=repository.product_id, idempotency_key="meeting_create_1"),
+    )
+    await service.accept(
+        user_id=repository.seller_id,
+        campus_status=CampusVerificationStatus.VERIFIED,
+        order_id=created.id,
+        client_action_id="meeting_accept_1",
+    )
+    proposal = await service.propose_meeting(
+        user_id=repository.buyer_id,
+        campus_status=CampusVerificationStatus.VERIFIED,
+        order_id=created.id,
+        payload=MeetingProposalCreate(
+            client_action_id="meeting_propose_1",
+            proposed_for=datetime.now(UTC) + timedelta(days=1),
+            location_text="图书馆东门",
+        ),
+    )
+    confirmed = await service.confirm_meeting(
+        user_id=repository.seller_id,
+        campus_status=CampusVerificationStatus.VERIFIED,
+        order_id=created.id,
+        proposal_id=proposal.id,
+        client_action_id="meeting_confirm_1",
+    )
+    repeated = await service.confirm_meeting(
+        user_id=repository.seller_id,
+        campus_status=CampusVerificationStatus.VERIFIED,
+        order_id=created.id,
+        proposal_id=proposal.id,
+        client_action_id="meeting_confirm_1",
+    )
+
+    assert confirmed.status == MeetingProposalStatus.ACCEPTED.value
+    assert repeated.status == MeetingProposalStatus.ACCEPTED.value
+    assert repository.orders[created.id].status == OrderStatus.SCHEDULED
+    assert confirmed.location_text == "图书馆东门"
+
+    cancelled = await service.cancel(
+        user_id=repository.buyer_id,
+        campus_status=CampusVerificationStatus.VERIFIED,
+        order_id=created.id,
+        payload=OrderCancel(
+            client_action_id="meeting_cancel_1",
+            reason_code="schedule_failed",
+            note="双方无法调整时间",
+        ),
+    )
+    repeated_cancel = await service.cancel(
+        user_id=repository.buyer_id,
+        campus_status=CampusVerificationStatus.VERIFIED,
+        order_id=created.id,
+        payload=OrderCancel(
+            client_action_id="meeting_cancel_1",
+            reason_code="schedule_failed",
+            note="双方无法调整时间",
+        ),
+    )
+    assert cancelled.status == OrderStatus.CANCELLED.value
+    assert repeated_cancel.status == OrderStatus.CANCELLED.value
+    assert repository.product.status == ProductStatus.ON_SALE
+    assert repository.product.reserved_at is None
+
+
+@pytest.mark.anyio
+async def test_meeting_permissions_time_bounds_and_expiration_are_safe_to_retry() -> None:
+    repository = FakeOrderRepository()
+    service = OrderService(repository)
+    created = await service.create(
+        user_id=repository.buyer_id,
+        campus_status=CampusVerificationStatus.VERIFIED,
+        payload=OrderCreate(product_id=repository.product_id, idempotency_key="expiry_create_1"),
+    )
+    repository.orders[created.id].expires_at = datetime.now(UTC) - timedelta(seconds=1)
+
+    assert await service.expire_pending() == 1
+    assert await service.expire_pending() == 0
+    assert repository.orders[created.id].status == OrderStatus.EXPIRED
+    assert repository.product.status == ProductStatus.ON_SALE
+    assert (
+        len([event for event in repository.events if event.to_status == OrderStatus.EXPIRED]) == 1
+    )
+
+    outsider = uuid4()
+    with pytest.raises(AppError) as unauthorized:
+        await service.cancel(
+            user_id=outsider,
+            campus_status=CampusVerificationStatus.VERIFIED,
+            order_id=created.id,
+            payload=OrderCancel(client_action_id="outsider_cancel_1", reason_code="other"),
+        )
+    assert unauthorized.value.code == "order_not_found"
+
+
+@pytest.mark.anyio
+async def test_meeting_proposal_rejects_unauthorized_and_out_of_range_times() -> None:
+    repository = FakeOrderRepository()
+    service = OrderService(repository)
+    created = await service.create(
+        user_id=repository.buyer_id,
+        campus_status=CampusVerificationStatus.VERIFIED,
+        payload=OrderCreate(product_id=repository.product_id, idempotency_key="bounds_create_1"),
+    )
+    await service.accept(
+        user_id=repository.seller_id,
+        campus_status=CampusVerificationStatus.VERIFIED,
+        order_id=created.id,
+        client_action_id="bounds_accept_1",
+    )
+    with pytest.raises(AppError) as too_soon:
+        await service.propose_meeting(
+            user_id=repository.buyer_id,
+            campus_status=CampusVerificationStatus.VERIFIED,
+            order_id=created.id,
+            payload=MeetingProposalCreate(
+                client_action_id="bounds_propose_1",
+                proposed_for=datetime.now(UTC) + timedelta(minutes=5),
+                location_text="教学楼门口",
+            ),
+        )
+    assert too_soon.value.code == "meeting_time_out_of_range"
+
+    with pytest.raises(AppError) as outsider:
+        await service.propose_meeting(
+            user_id=uuid4(),
+            campus_status=CampusVerificationStatus.VERIFIED,
+            order_id=created.id,
+            payload=MeetingProposalCreate(
+                client_action_id="bounds_propose_2",
+                proposed_for=datetime.now(UTC) + timedelta(days=1),
+                location_text="教学楼门口",
+            ),
+        )
+    assert outsider.value.code == "order_not_found"

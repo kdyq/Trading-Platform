@@ -6,9 +6,21 @@ from uuid import UUID, uuid4
 from app.core.exceptions import AppError
 from app.models.catalog import ProductStatus
 from app.models.identity import CampusVerificationStatus
-from app.models.trade import Order, OrderCommand, OrderStatus
+from app.models.trade import (
+    MeetingProposalStatus,
+    Order,
+    OrderCommand,
+    OrderMeetingProposal,
+    OrderStatus,
+)
 from app.repositories.orders import OrderRepository
-from app.schemas.orders import OrderCreate, OrderResponse
+from app.schemas.orders import (
+    MeetingProposalCreate,
+    MeetingProposalResponse,
+    OrderCancel,
+    OrderCreate,
+    OrderResponse,
+)
 
 
 class OrderService:
@@ -134,6 +146,7 @@ class OrderService:
         now = datetime.now(UTC)
         previous = order.status
         order.status = OrderStatus.ACCEPTED
+        order.expires_at = None
         product.status = ProductStatus.RESERVED
         product.reserved_at = now
         event = self.repository.add_event(
@@ -173,6 +186,301 @@ class OrderService:
         )
         await self.repository.refresh_order(order)
         return self._response(order)
+
+    async def propose_meeting(
+        self,
+        *,
+        user_id: UUID,
+        campus_status: CampusVerificationStatus,
+        order_id: UUID,
+        payload: MeetingProposalCreate,
+    ) -> MeetingProposalResponse:
+        self._require_verified(campus_status)
+        order = await self.repository.get_order(order_id, for_update=True)
+        self._require_participant(order, user_id)
+        assert order is not None
+        payload_hash = self._payload_hash(
+            "propose_meeting",
+            {
+                "proposed_for": payload.proposed_for.isoformat(),
+                "location_text": payload.location_text,
+            },
+        )
+        existing = await self.repository.find_command(user_id, payload.client_action_id)
+        if existing is not None:
+            self._require_same_command(existing, order.id, "propose_meeting", payload_hash)
+            proposal = (
+                await self.repository.get_meeting_proposal(existing.result_id)
+                if existing.result_id is not None
+                else None
+            )
+            if proposal is None:
+                raise AppError(
+                    status_code=409,
+                    code="order_action_result_missing",
+                    message="操作结果不存在",
+                )
+            return self._proposal_response(proposal)
+        if order.status not in (OrderStatus.ACCEPTED, OrderStatus.SCHEDULED):
+            raise AppError(
+                status_code=409, code="invalid_order_state", message="当前订单不能协商面交"
+            )
+        now = datetime.now(UTC)
+        proposed_for = payload.proposed_for
+        if proposed_for.tzinfo is None or proposed_for.utcoffset() is None:
+            raise AppError(
+                status_code=422, code="meeting_timezone_required", message="面交时间必须包含时区"
+            )
+        proposed_for = proposed_for.astimezone(UTC)
+        if proposed_for < now + timedelta(minutes=30) or proposed_for > now + timedelta(days=30):
+            raise AppError(
+                status_code=422,
+                code="meeting_time_out_of_range",
+                message="面交时间须在 30 分钟至 30 天内",
+            )
+        proposal = OrderMeetingProposal(
+            id=uuid4(),
+            order_id=order.id,
+            proposer_id=user_id,
+            proposed_for=proposed_for,
+            location_text=payload.location_text.strip(),
+            status=MeetingProposalStatus.PENDING,
+            buyer_confirmed_at=now if user_id == order.buyer_id else None,
+            seller_confirmed_at=now if user_id == order.seller_id else None,
+        )
+        self.repository.add_meeting_proposal(proposal)
+        event = self.repository.add_event(
+            order=order,
+            actor_id=user_id,
+            from_status=order.status,
+            to_status=order.status,
+            note="提交面交时间候选",
+            event_data={"proposal_id": str(proposal.id), "proposed_for": proposed_for.isoformat()},
+        )
+        self.repository.add_command(
+            order_id=order.id,
+            actor_id=user_id,
+            client_action_id=payload.client_action_id,
+            command="propose_meeting",
+            payload_hash=payload_hash,
+            event=event,
+            result_id=proposal.id,
+        )
+        await self.repository.create_notification(
+            recipient_id=self._other_party(order, user_id),
+            event_key=f"order.meeting_proposed:{proposal.id}",
+            title="收到新的面交提议",
+            summary="对方提出了新的校内面交时间和地点，请进入订单查看。",
+            order_id=order.id,
+        )
+        await self.repository.refresh_meeting_proposal(proposal)
+        return self._proposal_response(proposal)
+
+    async def confirm_meeting(
+        self,
+        *,
+        user_id: UUID,
+        campus_status: CampusVerificationStatus,
+        order_id: UUID,
+        proposal_id: UUID,
+        client_action_id: str,
+    ) -> MeetingProposalResponse:
+        self._require_verified(campus_status)
+        order = await self.repository.get_order(order_id, for_update=True)
+        self._require_participant(order, user_id)
+        assert order is not None
+        payload_hash = self._payload_hash("confirm_meeting", {"proposal_id": str(proposal_id)})
+        existing = await self.repository.find_command(user_id, client_action_id)
+        if existing is not None:
+            self._require_same_command(existing, order.id, "confirm_meeting", payload_hash)
+            proposal = await self.repository.get_meeting_proposal(proposal_id)
+            if proposal is None or proposal.order_id != order.id:
+                raise AppError(
+                    status_code=404,
+                    code="meeting_proposal_not_found",
+                    message="面交提议不存在",
+                )
+            return self._proposal_response(proposal)
+        proposal = await self.repository.get_meeting_proposal(proposal_id, for_update=True)
+        if proposal is None or proposal.order_id != order.id:
+            raise AppError(
+                status_code=404, code="meeting_proposal_not_found", message="面交提议不存在"
+            )
+        if order.status not in (OrderStatus.ACCEPTED, OrderStatus.SCHEDULED):
+            raise AppError(
+                status_code=409, code="invalid_order_state", message="当前订单不能确认面交"
+            )
+        if proposal.status != MeetingProposalStatus.PENDING:
+            raise AppError(
+                status_code=409, code="meeting_proposal_closed", message="面交提议已失效"
+            )
+        now = datetime.now(UTC)
+        if user_id == order.buyer_id:
+            if proposal.buyer_confirmed_at is not None:
+                raise AppError(
+                    status_code=409,
+                    code="meeting_already_confirmed",
+                    message="你已确认该面交提议",
+                )
+            proposal.buyer_confirmed_at = now
+        else:
+            if proposal.seller_confirmed_at is not None:
+                raise AppError(
+                    status_code=409,
+                    code="meeting_already_confirmed",
+                    message="你已确认该面交提议",
+                )
+            proposal.seller_confirmed_at = now
+        previous = order.status
+        both_confirmed = (
+            proposal.buyer_confirmed_at is not None and proposal.seller_confirmed_at is not None
+        )
+        if both_confirmed:
+            proposal.status = MeetingProposalStatus.ACCEPTED
+            order.status = OrderStatus.SCHEDULED
+            order.scheduled_for = proposal.proposed_for
+            await self.repository.supersede_other_proposals(order.id, proposal.id)
+        event = self.repository.add_event(
+            order=order,
+            actor_id=user_id,
+            from_status=previous,
+            to_status=order.status,
+            note="双方确认面交安排" if both_confirmed else "一方确认面交提议",
+            event_data={"proposal_id": str(proposal.id)},
+        )
+        self.repository.add_command(
+            order_id=order.id,
+            actor_id=user_id,
+            client_action_id=client_action_id,
+            command="confirm_meeting",
+            payload_hash=payload_hash,
+            event=event,
+            result_id=proposal.id,
+        )
+        await self.repository.create_notification(
+            recipient_id=self._other_party(order, user_id),
+            event_key=f"order.meeting_confirmed:{proposal.id}:{user_id}",
+            title="面交安排已确认" if both_confirmed else "对方已确认面交提议",
+            summary=(
+                "双方已确认校内面交安排，请按约定前往。"
+                if both_confirmed
+                else "请进入订单确认面交安排。"
+            ),
+            order_id=order.id,
+        )
+        await self.repository.refresh_meeting_proposal(proposal)
+        return self._proposal_response(proposal)
+
+    async def cancel(
+        self,
+        *,
+        user_id: UUID,
+        campus_status: CampusVerificationStatus,
+        order_id: UUID,
+        payload: OrderCancel,
+    ) -> OrderResponse:
+        self._require_verified(campus_status)
+        snapshot = await self.repository.get_order(order_id)
+        self._require_participant(snapshot, user_id)
+        assert snapshot is not None
+        product = await self.repository.lock_product(snapshot.product_id)
+        order = await self.repository.get_order(order_id, for_update=True)
+        self._require_participant(order, user_id)
+        assert order is not None
+        payload_hash = self._payload_hash(
+            "cancel", {"reason_code": payload.reason_code, "note": payload.note}
+        )
+        existing = await self.repository.find_command(user_id, payload.client_action_id)
+        if existing is not None:
+            self._require_same_command(existing, order.id, "cancel", payload_hash)
+            return self._response(order)
+        if order.status not in (
+            OrderStatus.PENDING_SELLER_CONFIRMATION,
+            OrderStatus.ACCEPTED,
+            OrderStatus.SCHEDULED,
+        ):
+            raise AppError(status_code=409, code="invalid_order_state", message="当前订单不能取消")
+        if product is None:
+            raise AppError(status_code=409, code="product_not_available", message="关联商品不存在")
+        previous = order.status
+        order.status = OrderStatus.CANCELLED
+        order.cancelled_at = datetime.now(UTC)
+        order.cancellation_reason_code = payload.reason_code
+        order.cancellation_note = payload.note
+        order.expires_at = None
+        if product.status == ProductStatus.RESERVED:
+            product.status = ProductStatus.ON_SALE
+            product.reserved_at = None
+        await self.repository.withdraw_pending_proposals(order.id)
+        event = self.repository.add_event(
+            order=order,
+            actor_id=user_id,
+            from_status=previous,
+            to_status=OrderStatus.CANCELLED,
+            note="订单已取消",
+            event_data={"reason_code": payload.reason_code},
+        )
+        self.repository.add_command(
+            order_id=order.id,
+            actor_id=user_id,
+            client_action_id=payload.client_action_id,
+            command="cancel",
+            payload_hash=payload_hash,
+            event=event,
+        )
+        await self.repository.create_notification(
+            recipient_id=self._other_party(order, user_id),
+            event_key=f"order.cancelled:{order.id}",
+            title="订单已取消",
+            summary="对方已取消本次校内面交订单，商品已按规则恢复在售。",
+            order_id=order.id,
+        )
+        await self.repository.refresh_order(order)
+        return self._response(order)
+
+    async def expire_pending(self, *, limit: int = 50) -> int:
+        orders = await self.repository.claim_expired_pending(limit)
+        for order in orders:
+            previous = order.status
+            order.status = OrderStatus.EXPIRED
+            self.repository.add_event(
+                order=order,
+                actor_id=None,
+                from_status=previous,
+                to_status=OrderStatus.EXPIRED,
+                note="卖家未在确认期限内响应，订单自动过期",
+            )
+            await self.repository.create_notification(
+                recipient_id=order.buyer_id,
+                event_key=f"order.expired:{order.id}",
+                title="交易请求已过期",
+                summary="卖家未在确认期限内响应，商品保持在售。",
+                order_id=order.id,
+            )
+        return len(orders)
+
+    @staticmethod
+    def _proposal_response(proposal: OrderMeetingProposal) -> MeetingProposalResponse:
+        return MeetingProposalResponse(
+            id=proposal.id,
+            order_id=proposal.order_id,
+            proposer_id=proposal.proposer_id,
+            proposed_for=proposal.proposed_for,
+            location_text=proposal.location_text,
+            status=proposal.status.value,
+            buyer_confirmed_at=proposal.buyer_confirmed_at,
+            seller_confirmed_at=proposal.seller_confirmed_at,
+            created_at=proposal.created_at,
+        )
+
+    @staticmethod
+    def _require_participant(order: Order | None, user_id: UUID) -> None:
+        if order is None or user_id not in (order.buyer_id, order.seller_id):
+            raise AppError(status_code=404, code="order_not_found", message="订单不存在")
+
+    @staticmethod
+    def _other_party(order: Order, user_id: UUID) -> UUID:
+        return order.seller_id if user_id == order.buyer_id else order.buyer_id
 
     @staticmethod
     def _response(order: Order) -> OrderResponse:

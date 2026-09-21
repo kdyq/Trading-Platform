@@ -191,6 +191,7 @@ class OrderCommand(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     event_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("order_events.id", ondelete="RESTRICT")
     )
+    result_id: Mapped[UUID | None]
 
     event: Mapped[OrderEvent | None] = relationship()
 

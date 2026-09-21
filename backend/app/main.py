@@ -20,6 +20,7 @@ from app.services.realtime import (
     RedisChatMessageLimiter,
     RedisRealtimePublisher,
 )
+from app.workers.order_expiration import OrderExpirationCoordinator
 
 
 @asynccontextmanager
@@ -46,6 +47,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         if app.state.session_factory is not None
         else None
     )
+    app.state.order_expiration = (
+        OrderExpirationCoordinator(app.state.session_factory)
+        if app.state.session_factory is not None
+        else None
+    )
     listener_task = (
         asyncio.create_task(app.state.realtime_publisher.listen())
         if app.state.redis is not None
@@ -54,6 +60,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     notification_retry_task = (
         asyncio.create_task(app.state.notification_delivery.run())
         if app.state.notification_delivery is not None
+        else None
+    )
+    order_expiration_task = (
+        asyncio.create_task(app.state.order_expiration.run())
+        if app.state.order_expiration is not None
         else None
     )
     yield
@@ -68,6 +79,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         notification_retry_task.cancel()
         with suppress(asyncio.CancelledError):
             await notification_retry_task
+    if order_expiration_task is not None:
+        order_expiration_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await order_expiration_task
     app.state.session_factory = None
     if engine is not None:
         await engine.dispose()

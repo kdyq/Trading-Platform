@@ -3,7 +3,7 @@ import os
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import select, text
+from sqlalchemy import func, select, text, update
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.core.exceptions import AppError
@@ -11,10 +11,11 @@ from app.db.url import database_url_for_sqlalchemy, require_project_database
 from app.models import Base
 from app.models.catalog import Product, ProductStatus
 from app.models.identity import CampusVerificationStatus
-from app.models.trade import Order, OrderStatus
+from app.models.trade import Order, OrderEvent, OrderStatus
 from app.repositories.orders import SqlAlchemyOrderRepository
-from app.schemas.orders import OrderCreate
+from app.schemas.orders import OrderCancel, OrderCreate
 from app.services.orders import OrderService
+from app.workers.order_expiration import OrderExpirationCoordinator
 
 
 def test_only_one_concurrent_order_can_reserve_a_product() -> None:
@@ -151,6 +152,45 @@ async def _exercise_concurrent_accept(database_url: str) -> None:
             )
             assert product is not None and product.status == ProductStatus.RESERVED
             assert sorted(order.status.value for order in orders) == ["accepted", "cancelled"]
+            accepted_order = next(order for order in orders if order.status == OrderStatus.ACCEPTED)
+
+        async with factory.begin() as session:
+            cancelled = await OrderService(SqlAlchemyOrderRepository(session)).cancel(
+                user_id=seller_id,
+                campus_status=CampusVerificationStatus.VERIFIED,
+                order_id=accepted_order.id,
+                payload=OrderCancel(
+                    client_action_id="postgres_cancel_1",
+                    reason_code="schedule_failed",
+                    note="并发测试完成后恢复商品",
+                ),
+            )
+            assert cancelled.status == OrderStatus.CANCELLED.value
+
+        expiring = await create_order(first_buyer_id, "postgres_expiring_1")
+        async with factory.begin() as session:
+            await session.execute(
+                update(Order)
+                .where(Order.id == expiring.id)
+                .values(expires_at=func.now() - text("interval '1 second'"))
+            )
+        first_worker = OrderExpirationCoordinator(factory)
+        second_worker = OrderExpirationCoordinator(factory)
+        expired_counts = await asyncio.gather(first_worker.expire_due(), second_worker.expire_due())
+        assert sum(expired_counts) == 1
+        assert await first_worker.expire_due() == 0
+        async with factory() as session:
+            expired = await session.get(Order, expiring.id)
+            expiration_events = await session.scalar(
+                select(func.count(OrderEvent.id)).where(
+                    OrderEvent.order_id == expiring.id,
+                    OrderEvent.to_status == OrderStatus.EXPIRED,
+                )
+            )
+            product = await session.get(Product, product_id)
+            assert expired is not None and expired.status == OrderStatus.EXPIRED
+            assert expiration_events == 1
+            assert product is not None and product.status == ProductStatus.ON_SALE
     finally:
         await engine.dispose()
         async with admin_engine.begin() as connection:
