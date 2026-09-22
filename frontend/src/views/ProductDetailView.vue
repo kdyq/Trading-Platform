@@ -9,6 +9,7 @@ import type { PublicProductDetail } from '../api/market'
 import { createOrder } from '../api/orders'
 import ProductCard from '../components/market/ProductCard.vue'
 import ProductGallery from '../components/market/ProductGallery.vue'
+import ReportDialog from '../components/moderation/ReportDialog.vue'
 import UiButton from '../components/ui/UiButton.vue'
 import UiChip from '../components/ui/UiChip.vue'
 import UiDialog from '../components/ui/UiDialog.vue'
@@ -27,7 +28,8 @@ const favoriteBusy = ref(false)
 const contactBusy = ref(false)
 const orderBusy = ref(false)
 const gate = ref<'login' | 'verification' | 'later' | null>(null)
-const gateIntent = ref<'action' | 'report'>('action')
+const reportOpen = ref(false)
+const reportNotice = ref('')
 let controller: AbortController | undefined
 const originalTitle = document.title
 const originalDescription = document.querySelector<HTMLMetaElement>(
@@ -90,8 +92,8 @@ function setMeta(title: string, description: string) {
 
 function openGate(intent: 'action' | 'report' = 'action') {
   if (intent === 'action' && actionDisabled.value) return
-  gateIntent.value = intent
   if (!auth.user) gate.value = 'login'
+  else if (intent === 'report') reportOpen.value = true
   else if (intent === 'action' && auth.user.campus_verification_status !== 'verified')
     gate.value = 'verification'
   else gate.value = 'later'
@@ -323,6 +325,7 @@ onUnmounted(() => {
           <button class="text-button report-entry" type="button" @click="openGate('report')">
             举报商品
           </button>
+          <p v-if="reportNotice" role="status">{{ reportNotice }}</p>
         </article>
 
         <aside class="seller-trust-card">
@@ -392,13 +395,19 @@ onUnmounted(() => {
           <RouterLink class="button button-primary" to="/campus-verification">去认证</RouterLink>
         </template>
         <template v-else>
-          <p v-if="gateIntent === 'report'">
-            举报入口已保留，提交与治理处理将在后续阶段开放，本阶段不会伪造举报结果。
-          </p>
-          <p v-else>身份门禁已通过。联系与交易写入将在后续交易阶段开放，本阶段不会伪造提交结果。</p>
+          <p>身份门禁已通过。</p>
           <UiButton variant="secondary" @click="gate = null">知道了</UiButton>
         </template>
       </div>
     </UiDialog>
+    <ReportDialog
+      v-if="product"
+      :open="reportOpen"
+      target-type="product"
+      :target-id="product.id"
+      title="举报这件商品"
+      @close="reportOpen = false"
+      @submitted="reportNotice = '举报已受理，可在“我的举报”查看进度。'"
+    />
   </section>
 </template>

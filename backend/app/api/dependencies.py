@@ -23,6 +23,7 @@ from app.repositories.product_images import (
     ProductImageUploadRepository,
     SqlAlchemyProductImageUploadRepository,
 )
+from app.repositories.reports import SqlAlchemyReportRepository
 from app.repositories.seller_products import (
     SellerProductRepository,
     SqlAlchemySellerProductRepository,
@@ -61,6 +62,8 @@ from app.services.realtime import (
     UnavailableWebSocketTicketStore,
     WebSocketTicketStore,
 )
+from app.services.report_storage import PrivateReportStorage
+from app.services.reports import ReportService
 from app.services.seller_products import SellerProductService
 
 catalog_cache = CatalogCache()
@@ -266,6 +269,20 @@ def get_credit_service(
     session: Annotated[AsyncSession, Depends(get_database_session)],
 ) -> CreditService:
     return CreditService(SqlAlchemyCreditRepository(session))
+
+
+def get_report_service(
+    session: Annotated[AsyncSession, Depends(get_database_session)],
+    settings: Annotated[Settings, Depends(get_settings_from_request)],
+) -> ReportService:
+    return ReportService(
+        SqlAlchemyReportRepository(session),
+        PrivateReportStorage(
+            settings.resolved_private_storage_root,
+            max_bytes=settings.report_evidence_max_bytes,
+        ),
+        hourly_limit=settings.report_hourly_limit,
+    )
 
 
 def get_catalog_service(

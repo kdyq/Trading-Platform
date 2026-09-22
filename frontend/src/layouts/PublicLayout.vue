@@ -24,6 +24,7 @@ async function logout() {
             <RouterLink class="navigation-link" to="/messages">消息</RouterLink>
             <RouterLink class="navigation-link" to="/orders">订单</RouterLink>
             <RouterLink class="navigation-link" to="/notifications">通知</RouterLink>
+            <RouterLink class="navigation-link" to="/reports">举报</RouterLink>
             <RouterLink class="navigation-link" to="/account">
               {{ auth.user.display_name }}
             </RouterLink>

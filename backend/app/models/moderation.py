@@ -1,10 +1,11 @@
+from datetime import datetime
 from enum import StrEnum
 from uuid import UUID
 
 from sqlalchemy import JSON, Enum, ForeignKey, Index, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.models.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
+from app.models.base import Base, TimestampMixin, UUIDPrimaryKeyMixin, VersionMixin
 
 
 class ModerationTargetType(StrEnum):
@@ -20,6 +21,8 @@ class ReportStatus(StrEnum):
     REVIEWING = "reviewing"
     RESOLVED = "resolved"
     DISMISSED = "dismissed"
+    WITHDRAWN = "withdrawn"
+    APPEALED = "appealed"
 
 
 class ModerationAction(StrEnum):
@@ -31,7 +34,7 @@ class ModerationAction(StrEnum):
     SUSPEND = "suspend"
 
 
-class Report(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+class Report(UUIDPrimaryKeyMixin, TimestampMixin, VersionMixin, Base):
     __tablename__ = "reports"
     __table_args__ = (
         UniqueConstraint(
@@ -58,6 +61,9 @@ class Report(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     target_id: Mapped[UUID]
     reason_code: Mapped[str] = mapped_column(String(64))
     details: Mapped[str | None] = mapped_column(Text)
+    public_result: Mapped[str | None] = mapped_column(Text)
+    resolved_at: Mapped[datetime | None]
+    withdrawn_at: Mapped[datetime | None]
     status: Mapped[ReportStatus] = mapped_column(
         Enum(
             ReportStatus,
@@ -69,6 +75,50 @@ class Report(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         default=ReportStatus.OPEN,
         server_default=ReportStatus.OPEN.value,
     )
+
+
+class ReportEvidence(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "report_evidence"
+    __table_args__ = (
+        UniqueConstraint("report_id", "sha256", name="uq_report_evidence_content"),
+        Index("ix_report_evidence_report_created", "report_id", "created_at"),
+    )
+
+    report_id: Mapped[UUID] = mapped_column(ForeignKey("reports.id", ondelete="RESTRICT"))
+    uploader_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"))
+    object_key: Mapped[str] = mapped_column(String(512), unique=True)
+    original_filename: Mapped[str] = mapped_column(String(255))
+    media_type: Mapped[str] = mapped_column(String(80))
+    size_bytes: Mapped[int]
+    sha256: Mapped[str] = mapped_column(String(64))
+
+
+class ReportEvent(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "report_events"
+    __table_args__ = (Index("ix_report_events_report_created", "report_id", "created_at"),)
+
+    report_id: Mapped[UUID] = mapped_column(ForeignKey("reports.id", ondelete="RESTRICT"))
+    actor_id: Mapped[UUID | None] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"))
+    from_status: Mapped[ReportStatus | None] = mapped_column(
+        Enum(
+            ReportStatus,
+            values_callable=lambda members: [member.value for member in members],
+            native_enum=False,
+            create_constraint=True,
+            name="report_event_from_status",
+        )
+    )
+    to_status: Mapped[ReportStatus] = mapped_column(
+        Enum(
+            ReportStatus,
+            values_callable=lambda members: [member.value for member in members],
+            native_enum=False,
+            create_constraint=True,
+            name="report_event_to_status",
+        )
+    )
+    public_note: Mapped[str | None] = mapped_column(Text)
+    event_data: Mapped[dict[str, object]] = mapped_column(JSON, default=dict)
 
 
 class ModerationRecord(UUIDPrimaryKeyMixin, TimestampMixin, Base):

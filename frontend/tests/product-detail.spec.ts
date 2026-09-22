@@ -183,7 +183,8 @@ describe('product detail', () => {
       campus_verification_status: 'pending',
     })
     await wrapper.get('.report-entry').trigger('click')
-    expect(document.body.textContent).toContain('举报入口已保留')
+    expect(document.body.textContent).toContain('举报这件商品')
+    expect(document.body.textContent).toContain('证据仅供授权审核人员查看')
     wrapper.unmount()
   })
 

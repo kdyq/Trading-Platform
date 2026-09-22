@@ -40,6 +40,8 @@ from app.models.moderation import (
     ModerationRecord,
     ModerationTargetType,
     Report,
+    ReportEvent,
+    ReportEvidence,
     ReportStatus,
 )
 from app.models.notification import (
@@ -95,6 +97,8 @@ __all__ = [
     "ProductImageUploadStatus",
     "ProductStatus",
     "Report",
+    "ReportEvent",
+    "ReportEvidence",
     "ReportStatus",
     "Review",
     "Role",
