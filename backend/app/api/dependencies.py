@@ -289,8 +289,17 @@ def get_report_service(
 
 def get_moderation_service(
     session: Annotated[AsyncSession, Depends(get_database_session)],
+    settings: Annotated[Settings, Depends(get_settings_from_request)],
 ) -> ModerationService:
-    return ModerationService(SqlAlchemyModerationRepository(session))
+    return ModerationService(
+        SqlAlchemyModerationRepository(session),
+        SqlAlchemyCreditRepository(session),
+        SqlAlchemyReportRepository(session),
+        PrivateReportStorage(
+            settings.resolved_private_storage_root,
+            max_bytes=settings.report_evidence_max_bytes,
+        ),
+    )
 
 
 def get_catalog_service(

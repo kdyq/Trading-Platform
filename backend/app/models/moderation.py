@@ -26,12 +26,15 @@ class ReportStatus(StrEnum):
 
 
 class ModerationAction(StrEnum):
+    REVIEW = "review"
+    DISMISS = "dismiss"
     APPROVE = "approve"
     REJECT = "reject"
     HIDE = "hide"
     RESTORE = "restore"
     WARN = "warn"
     SUSPEND = "suspend"
+    REVERSE = "reverse"
 
 
 class Report(UUIDPrimaryKeyMixin, TimestampMixin, VersionMixin, Base):
@@ -49,6 +52,12 @@ class Report(UUIDPrimaryKeyMixin, TimestampMixin, VersionMixin, Base):
     )
 
     reporter_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"))
+    subject_user_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="RESTRICT")
+    )
+    decision_moderator_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="RESTRICT")
+    )
     target_type: Mapped[ModerationTargetType] = mapped_column(
         Enum(
             ModerationTargetType,
@@ -119,6 +128,20 @@ class ReportEvent(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
     public_note: Mapped[str | None] = mapped_column(Text)
     event_data: Mapped[dict[str, object]] = mapped_column(JSON, default=dict)
+
+
+class ReportAppeal(UUIDPrimaryKeyMixin, TimestampMixin, VersionMixin, Base):
+    __tablename__ = "report_appeals"
+    __table_args__ = (UniqueConstraint("report_id", name="uq_report_appeals_report_id"),)
+
+    report_id: Mapped[UUID] = mapped_column(ForeignKey("reports.id", ondelete="RESTRICT"))
+    appellant_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"))
+    original_moderator_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"))
+    reviewer_id: Mapped[UUID | None] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"))
+    details: Mapped[str] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(24), default="pending", server_default="pending")
+    review_reason: Mapped[str | None] = mapped_column(Text)
+    reviewed_at: Mapped[datetime | None]
 
 
 class ModerationRecord(UUIDPrimaryKeyMixin, TimestampMixin, Base):

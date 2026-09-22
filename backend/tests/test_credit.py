@@ -89,6 +89,20 @@ class MemoryCreditRepository:
     async def get(self, ledger_id: UUID) -> CreditLedger | None:
         return next((item for item in self.ledgers if item.id == ledger_id), None)
 
+    async def find_source(
+        self, user_id: UUID, event_type: CreditEventType, reference_id: UUID
+    ) -> CreditLedger | None:
+        return next(
+            (
+                item
+                for item in self.ledgers
+                if item.user_id == user_id
+                and item.event_type == event_type
+                and item.reference_id == reference_id
+            ),
+            None,
+        )
+
 
 def test_credit_starts_at_100_and_adjustments_are_idempotent() -> None:
     asyncio.run(_exercise_idempotent_adjustment())

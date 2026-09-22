@@ -125,6 +125,15 @@ onMounted(load)
           >
             查看会话
           </RouterLink>
+          <RouterLink v-else-if="item.target_type === 'report'" to="/reports">
+            查看举报
+          </RouterLink>
+          <RouterLink
+            v-else-if="item.target_type === 'report_appeal' && item.target_id"
+            :to="`/appeals/${item.target_id}`"
+          >
+            提交申诉
+          </RouterLink>
         </article>
       </div>
     </div>

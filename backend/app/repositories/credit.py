@@ -42,6 +42,10 @@ class CreditRepository(Protocol):
 
     async def get(self, ledger_id: UUID) -> CreditLedger | None: ...
 
+    async def find_source(
+        self, user_id: UUID, event_type: CreditEventType, reference_id: UUID
+    ) -> CreditLedger | None: ...
+
 
 class SqlAlchemyCreditRepository:
     def __init__(self, session: AsyncSession) -> None:
@@ -154,3 +158,17 @@ class SqlAlchemyCreditRepository:
 
     async def get(self, ledger_id: UUID) -> CreditLedger | None:
         return cast(CreditLedger | None, await self.session.get(CreditLedger, ledger_id))
+
+    async def find_source(
+        self, user_id: UUID, event_type: CreditEventType, reference_id: UUID
+    ) -> CreditLedger | None:
+        return cast(
+            CreditLedger | None,
+            await self.session.scalar(
+                select(CreditLedger).where(
+                    CreditLedger.user_id == user_id,
+                    CreditLedger.event_type == event_type,
+                    CreditLedger.reference_id == reference_id,
+                )
+            ),
+        )

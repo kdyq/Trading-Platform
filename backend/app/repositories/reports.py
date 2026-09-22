@@ -73,6 +73,34 @@ class SqlAlchemyReportRepository:
             )
         return False
 
+    async def target_subject(
+        self, *, reporter_id: UUID, target_type: ModerationTargetType, target_id: UUID
+    ) -> UUID | None:
+        if not await self.target_visible(
+            reporter_id=reporter_id, target_type=target_type, target_id=target_id
+        ):
+            return None
+        if target_type == ModerationTargetType.PRODUCT:
+            subject = await self.session.scalar(
+                select(Product.seller_id).where(Product.id == target_id)
+            )
+        elif target_type == ModerationTargetType.USER:
+            subject = target_id
+        elif target_type == ModerationTargetType.MESSAGE:
+            subject = await self.session.scalar(
+                select(Message.sender_id).where(Message.id == target_id)
+            )
+        elif target_type == ModerationTargetType.ORDER:
+            order = await self.session.get(Order, target_id)
+            subject = (
+                order.seller_id
+                if order is not None and order.buyer_id == reporter_id
+                else (order.buyer_id if order is not None else None)
+            )
+        else:
+            subject = None
+        return subject if subject != reporter_id else None
+
     async def recent_count(self, reporter_id: UUID) -> int:
         count = await self.session.scalar(
             select(func.count())
@@ -92,6 +120,7 @@ class SqlAlchemyReportRepository:
         target_id: UUID,
         reason_code: str,
         details: str,
+        subject_user_id: UUID | None = None,
     ) -> tuple[Report, bool]:
         report_id = uuid4()
         inserted = await self.session.scalar(
@@ -103,6 +132,7 @@ class SqlAlchemyReportRepository:
                 target_id=target_id,
                 reason_code=reason_code,
                 details=details,
+                subject_user_id=subject_user_id,
                 status=ReportStatus.OPEN,
                 version=1,
             )

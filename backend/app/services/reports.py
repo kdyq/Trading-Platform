@@ -45,9 +45,10 @@ class ReportService:
         details: str,
     ) -> ReportResponse:
         target = ModerationTargetType(target_type)
-        if not await self.repository.target_visible(
+        subject_user_id = await self.repository.target_subject(
             reporter_id=reporter_id, target_type=target, target_id=target_id
-        ):
+        )
+        if subject_user_id is None:
             raise AppError(
                 status_code=404, code="report_target_not_found", message="举报对象不存在"
             )
@@ -67,6 +68,7 @@ class ReportService:
             target_id=target_id,
             reason_code=reason_code,
             details=details,
+            subject_user_id=subject_user_id,
         )
         return await self._response(report)
 

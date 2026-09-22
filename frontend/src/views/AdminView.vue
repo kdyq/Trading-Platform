@@ -2,18 +2,31 @@
 import { onMounted, ref } from 'vue'
 
 import { ApiError } from '../api/client'
-import { decideModerationProduct, listModerationProducts } from '../api/moderation'
-import type { ModerationProduct } from '../api/moderation'
+import {
+  decideModerationProduct,
+  decideModerationReport,
+  listModerationProducts,
+  listModerationReports,
+  listReportAppeals,
+  reviewReportAppeal,
+} from '../api/moderation'
+import type { ModerationProduct, ModerationReport, ReportAppeal } from '../api/moderation'
 import { useAuthStore } from '../stores/auth'
 
 const auth = useAuthStore()
 const products = ref<ModerationProduct[]>([])
+const reports = ref<ModerationReport[]>([])
+const appeals = ref<ReportAppeal[]>([])
 const status = ref('pending_review')
 const loading = ref(true)
 const error = ref('')
 const noteById = ref<Record<string, string>>({})
 const reasonById = ref<Record<string, string>>({})
 const busyId = ref('')
+const reportPublicNotes = ref<Record<string, string>>({})
+const reportInternalNotes = ref<Record<string, string>>({})
+const reportPenalties = ref<Record<string, 'none' | 'warn' | 'hide' | 'suspend'>>({})
+const appealNotes = ref<Record<string, string>>({})
 
 async function load() {
   if (!auth.accessToken) {
@@ -24,11 +37,61 @@ async function load() {
   loading.value = true
   error.value = ''
   try {
-    products.value = (await listModerationProducts(auth.accessToken, status.value)).items
+    const [productResult, reportResult, appealResult] = await Promise.all([
+      listModerationProducts(auth.accessToken, status.value),
+      listModerationReports(auth.accessToken),
+      listReportAppeals(auth.accessToken),
+    ])
+    products.value = productResult.items
+    reports.value = reportResult.items
+    appeals.value = appealResult.items
   } catch (caught) {
     error.value = caught instanceof Error ? caught.message : '审核队列加载失败'
   } finally {
     loading.value = false
+  }
+}
+
+async function reviewAppeal(appeal: ReportAppeal, action: 'uphold' | 'reverse') {
+  if (!auth.accessToken || busyId.value) return
+  const reason = appealNotes.value[appeal.id]?.trim() || ''
+  if (reason.length < 5) {
+    error.value = '请填写申诉复核理由。'
+    return
+  }
+  busyId.value = appeal.id
+  try {
+    Object.assign(appeal, await reviewReportAppeal(auth.accessToken, appeal.id, action, reason))
+  } catch (caught) {
+    error.value = caught instanceof Error ? caught.message : '申诉复核失败'
+  } finally {
+    busyId.value = ''
+  }
+}
+
+async function decideReport(report: ModerationReport, action: 'review' | 'dismiss' | 'violate') {
+  if (!auth.accessToken || busyId.value) return
+  const publicResult = reportPublicNotes.value[report.id]?.trim() || ''
+  const internalReason = reportInternalNotes.value[report.id]?.trim() || ''
+  if (publicResult.length < 5 || internalReason.length < 5) {
+    error.value = '请填写公开结论和内部调查理由。'
+    return
+  }
+  busyId.value = report.id
+  try {
+    const updated = await decideModerationReport(auth.accessToken, report, {
+      action,
+      penalty_code: action === 'violate' ? reportPenalties.value[report.id] || 'warn' : 'none',
+      penalty_points: action === 'violate' ? 5 : 0,
+      public_result: publicResult,
+      internal_reason: internalReason,
+    })
+    Object.assign(report, updated)
+  } catch (caught) {
+    if (caught instanceof ApiError && caught.code === 'report_version_conflict') await load()
+    error.value = caught instanceof Error ? caught.message : '举报处理失败'
+  } finally {
+    busyId.value = ''
   }
 }
 
@@ -147,6 +210,63 @@ onMounted(load)
       </article>
     </div>
     <p v-if="error" class="moderation-error" role="alert">{{ error }}</p>
+    <section class="report-queue">
+      <header>
+        <p class="eyebrow">举报调查</p>
+        <h2>举报处置队列</h2>
+      </header>
+      <article v-for="report in reports" :key="report.id" class="report-review-card">
+        <div>
+          <strong>{{ report.target_type }} · {{ report.reason_code }}</strong>
+          <span>{{ report.status }} · 版本 {{ report.version }}</span>
+        </div>
+        <p>{{ report.details }}</p>
+        <small>已引用材料：{{ report.evidence_ids.length }} 项</small>
+        <label>
+          <span>公开处理结论</span>
+          <textarea v-model="reportPublicNotes[report.id]" rows="2" maxlength="500" />
+        </label>
+        <label>
+          <span>内部调查理由</span>
+          <textarea v-model="reportInternalNotes[report.id]" rows="2" maxlength="1000" />
+        </label>
+        <label>
+          <span>处罚</span>
+          <select v-model="reportPenalties[report.id]">
+            <option value="warn">警告与信用扣减</option>
+            <option value="hide">隐藏关联商品</option>
+            <option value="suspend">暂停用户（高风险）</option>
+          </select>
+        </label>
+        <div class="moderation-actions">
+          <button type="button" @click="decideReport(report, 'review')">开始调查</button>
+          <button class="secondary" type="button" @click="decideReport(report, 'dismiss')">
+            驳回举报
+          </button>
+          <button type="button" @click="decideReport(report, 'violate')">确认违规</button>
+        </div>
+      </article>
+    </section>
+    <section class="report-queue">
+      <header>
+        <p class="eyebrow">独立复核</p>
+        <h2>待处理申诉</h2>
+      </header>
+      <article v-for="appeal in appeals" :key="appeal.id" class="report-review-card">
+        <strong>举报 {{ appeal.report_id }}</strong>
+        <p>{{ appeal.details }}</p>
+        <label>
+          <span>复核理由</span>
+          <textarea v-model="appealNotes[appeal.id]" rows="3" maxlength="1000" />
+        </label>
+        <div class="moderation-actions">
+          <button class="secondary" type="button" @click="reviewAppeal(appeal, 'uphold')">
+            维持决定
+          </button>
+          <button type="button" @click="reviewAppeal(appeal, 'reverse')">撤销处罚</button>
+        </div>
+      </article>
+    </section>
   </section>
 </template>
 
@@ -235,6 +355,35 @@ onMounted(load)
 }
 .moderation-error {
   color: #a13b2b;
+}
+.report-queue {
+  margin-top: 3rem;
+}
+.report-review-card {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 1rem;
+  border: 1px solid #ded8d0;
+  border-radius: 18px;
+  padding: 1.25rem;
+  background: white;
+}
+.report-review-card > div:first-child {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.report-review-card label {
+  display: grid;
+  gap: 0.4rem;
+  font-weight: 700;
+}
+.report-review-card textarea,
+.report-review-card select {
+  border: 1px solid #ded8d0;
+  border-radius: 10px;
+  padding: 0.7rem;
+  font: inherit;
 }
 @media (max-width: 760px) {
   .moderation-heading,

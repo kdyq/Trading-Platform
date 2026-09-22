@@ -72,6 +72,11 @@ const router = createRouter({
           component: () => import('../views/ReportsView.vue'),
         },
         {
+          path: 'appeals/:reportId',
+          name: 'report-appeal',
+          component: () => import('../views/AppealView.vue'),
+        },
+        {
           path: 'orders',
           name: 'orders',
           component: () => import('../views/OrdersView.vue'),

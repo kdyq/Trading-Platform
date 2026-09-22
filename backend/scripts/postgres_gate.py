@@ -22,6 +22,7 @@ POSTGRES_TESTS = (
     "tests/test_orders_postgres.py",
     "tests/test_reports_postgres.py",
     "tests/test_moderation_postgres.py",
+    "tests/test_moderation_appeals_postgres.py",
 )
 
 
