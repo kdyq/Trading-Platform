@@ -18,6 +18,7 @@ from app.repositories.identity import (
     SqlAlchemyIdentityRepository,
 )
 from app.repositories.market import MarketRepository, SqlAlchemyMarketRepository
+from app.repositories.moderation import SqlAlchemyModerationRepository
 from app.repositories.orders import OrderRepository, SqlAlchemyOrderRepository
 from app.repositories.product_images import (
     ProductImageUploadRepository,
@@ -49,6 +50,7 @@ from app.services.mailer import (
     VerificationMailer,
 )
 from app.services.market import MarketService
+from app.services.moderation import ModerationService
 from app.services.notifications import NotificationDeliveryCoordinator
 from app.services.orders import OrderService
 from app.services.private_storage import PrivateAppealStorage
@@ -283,6 +285,12 @@ def get_report_service(
         ),
         hourly_limit=settings.report_hourly_limit,
     )
+
+
+def get_moderation_service(
+    session: Annotated[AsyncSession, Depends(get_database_session)],
+) -> ModerationService:
+    return ModerationService(SqlAlchemyModerationRepository(session))
 
 
 def get_catalog_service(

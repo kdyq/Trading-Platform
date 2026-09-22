@@ -151,6 +151,9 @@ class Product(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, VersionMixin
     published_at: Mapped[datetime | None]
     reserved_at: Mapped[datetime | None]
     sold_at: Mapped[datetime | None]
+    moderation_reason_code: Mapped[str | None] = mapped_column(String(64))
+    moderation_public_note: Mapped[str | None] = mapped_column(Text)
+    hidden_from_status: Mapped[str | None] = mapped_column(String(32))
 
     category: Mapped[Category] = relationship(back_populates="products")
     images: Mapped[list[ProductImage]] = relationship(back_populates="product")

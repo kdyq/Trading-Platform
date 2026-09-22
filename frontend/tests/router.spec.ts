@@ -71,7 +71,7 @@ describe('application routes', () => {
     ['/my-products', '我的发布', true],
     ['/favorites', '我的收藏', true],
     ['/orders', '我的订单', true],
-    ['/admin', '管理端工程已就绪', false],
+    ['/admin', '商品审核工作台', false],
     ['/missing', '这个摊位还没有摆出来', false],
   ])('renders %s', async (path, expectedText, authenticated) => {
     const wrapper = await renderRoute(path, authenticated)
