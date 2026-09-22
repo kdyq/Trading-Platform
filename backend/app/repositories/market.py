@@ -332,6 +332,7 @@ class SqlAlchemyMarketRepository:
                 Order.seller_id == Product.seller_id,
                 Review.reviewee_id == Order.seller_id,
                 Review.reviewer_id == Order.buyer_id,
+                Review.is_visible.is_(True),
             )
             .correlate(Product)
             .scalar_subquery()
@@ -344,6 +345,7 @@ class SqlAlchemyMarketRepository:
                 Order.seller_id == Product.seller_id,
                 Review.reviewee_id == Order.seller_id,
                 Review.reviewer_id == Order.buyer_id,
+                Review.is_visible.is_(True),
             )
             .correlate(Product)
             .scalar_subquery()

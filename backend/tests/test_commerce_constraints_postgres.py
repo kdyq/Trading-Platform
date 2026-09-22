@@ -112,8 +112,11 @@ async def _exercise_commerce_constraints(database_url: str) -> None:
             await connection.execute(
                 text(
                     "INSERT INTO orders "
-                    "(id, product_id, buyer_id, seller_id, idempotency_key, amount, status) "
-                    "VALUES (:id, :product, :buyer, :seller, 'order-1', 12.34, 'completed')"
+                    "(id, product_id, buyer_id, seller_id, idempotency_key, amount, status, "
+                    "product_title_snapshot, campus_name_snapshot, buyer_display_name_snapshot, "
+                    "seller_display_name_snapshot, completed_at) VALUES "
+                    "(:id, :product, :buyer, :seller, 'order-1', 12.34, 'completed', "
+                    "'测试商品', '测试校区', '买家', '卖家', now())"
                 ),
                 {
                     "id": order_id,

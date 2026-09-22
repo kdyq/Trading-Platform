@@ -22,6 +22,7 @@ async function logout() {
           <template v-if="auth.user">
             <RouterLink class="navigation-link" to="/sell">发布闲置</RouterLink>
             <RouterLink class="navigation-link" to="/messages">消息</RouterLink>
+            <RouterLink class="navigation-link" to="/orders">订单</RouterLink>
             <RouterLink class="navigation-link" to="/notifications">通知</RouterLink>
             <RouterLink class="navigation-link" to="/account">
               {{ auth.user.display_name }}

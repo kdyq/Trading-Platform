@@ -1,3 +1,5 @@
+import base64
+import binascii
 import hashlib
 import json
 from datetime import UTC, datetime, timedelta
@@ -13,6 +15,7 @@ from app.models.trade import (
     OrderCommand,
     OrderMeetingProposal,
     OrderStatus,
+    Review,
 )
 from app.repositories.orders import OrderRepository
 from app.schemas.orders import (
@@ -20,12 +23,26 @@ from app.schemas.orders import (
     MeetingProposalResponse,
     OrderCancel,
     OrderCreate,
+    OrderDetailResponse,
     OrderDispute,
+    OrderEventResponse,
+    OrderListResponse,
     OrderResponse,
+    OrderSummary,
+    ReviewCreate,
+    ReviewResponse,
 )
 
 
 class OrderService:
+    REVIEW_TAGS = {
+        "good_communication",
+        "on_time",
+        "item_as_described",
+        "friendly",
+        "smooth_transaction",
+    }
+
     def __init__(self, repository: OrderRepository) -> None:
         self.repository = repository
 
@@ -638,6 +655,178 @@ class OrderService:
         )
         await self.repository.refresh_order(order)
         return self._response(order)
+
+    async def list_orders(
+        self,
+        *,
+        user_id: UUID,
+        role: str,
+        status: OrderStatus | None,
+        cursor: str | None,
+        limit: int,
+    ) -> OrderListResponse:
+        before_created_at, before_id = self._decode_cursor(cursor) if cursor else (None, None)
+        records = list(
+            await self.repository.list_orders(
+                user_id=user_id,
+                role=role,
+                status=status,
+                before_created_at=before_created_at,
+                before_id=before_id,
+                limit=limit + 1,
+            )
+        )
+        has_more = len(records) > limit
+        page = records[:limit]
+        items = [
+            OrderSummary(
+                id=order.id,
+                product_id=order.product_id,
+                amount=order.amount,
+                status=order.status.value,
+                role=role,
+                product_title=order.product_title_snapshot,
+                campus_name=order.campus_name_snapshot,
+                counterparty_name=(
+                    order.seller_display_name_snapshot
+                    if role == "buying"
+                    else order.buyer_display_name_snapshot
+                ),
+                payment_mode=order.payment_mode,
+                image_url=(
+                    f"/api/v1/market/product-image-thumbnails/{image_id}"
+                    if image_id is not None
+                    else None
+                ),
+                scheduled_for=order.scheduled_for,
+                created_at=order.created_at,
+            )
+            for order, image_id in page
+        ]
+        return OrderListResponse(
+            items=items,
+            next_cursor=self._encode_cursor(page[-1][0]) if has_more and page else None,
+        )
+
+    async def detail(self, *, user_id: UUID, order_id: UUID) -> OrderDetailResponse:
+        order = await self.repository.get_order(order_id)
+        self._require_participant(order, user_id)
+        assert order is not None
+        events = await self.repository.list_order_events(order.id)
+        proposals = await self.repository.list_meeting_proposals(order.id)
+        reviews = await self.repository.list_reviews(order.id)
+        own_review = await self.repository.get_review(order.id, user_id)
+        deadline = (
+            order.completed_at + timedelta(days=30) if order.completed_at is not None else None
+        )
+        base = self._response(order)
+        return OrderDetailResponse(
+            **base.model_dump(),
+            cancellation_reason_code=order.cancellation_reason_code,
+            cancellation_note=order.cancellation_note,
+            dispute_reason_code=order.dispute_reason_code,
+            dispute_details=order.dispute_details,
+            seller_delivered_at=order.seller_delivered_at,
+            events=[
+                OrderEventResponse(
+                    id=event.id,
+                    actor_id=event.actor_id,
+                    from_status=event.from_status.value if event.from_status else None,
+                    to_status=event.to_status.value,
+                    note=event.note,
+                    created_at=event.created_at,
+                )
+                for event in events
+            ],
+            meeting_proposals=[self._proposal_response(proposal) for proposal in proposals],
+            reviews=[self._review_response(order, review) for review in reviews],
+            can_review=(
+                order.status == OrderStatus.COMPLETED
+                and deadline is not None
+                and datetime.now(UTC) <= deadline
+                and own_review is None
+            ),
+            review_deadline=deadline,
+        )
+
+    async def create_review(
+        self,
+        *,
+        user_id: UUID,
+        campus_status: CampusVerificationStatus,
+        order_id: UUID,
+        payload: ReviewCreate,
+    ) -> ReviewResponse:
+        self._require_verified(campus_status)
+        order = await self.repository.get_order(order_id, for_update=True)
+        self._require_participant(order, user_id)
+        assert order is not None
+        if order.status != OrderStatus.COMPLETED or order.completed_at is None:
+            raise AppError(
+                status_code=409, code="order_not_reviewable", message="订单完成后才能评价"
+            )
+        if datetime.now(UTC) > order.completed_at + timedelta(days=30):
+            raise AppError(status_code=409, code="review_window_closed", message="评价期限已结束")
+        if await self.repository.get_review(order.id, user_id) is not None:
+            raise AppError(status_code=409, code="review_already_exists", message="你已评价该订单")
+        tags = list(dict.fromkeys(payload.tags))
+        if any(tag not in self.REVIEW_TAGS for tag in tags):
+            raise AppError(status_code=422, code="invalid_review_tag", message="评价标签无效")
+        content = payload.content.strip() if payload.content else None
+        review = Review(
+            id=uuid4(),
+            order_id=order.id,
+            reviewer_id=user_id,
+            reviewee_id=self._other_party(order, user_id),
+            rating=payload.rating,
+            tags=tags,
+            content=content or None,
+            is_visible=True,
+        )
+        self.repository.add_review(review)
+        await self.repository.create_notification(
+            recipient_id=review.reviewee_id,
+            event_key=f"order.reviewed:{order.id}:{user_id}",
+            title="收到新的交易评价",
+            summary="对方已对本次完成的校内交易作出评价。",
+            order_id=order.id,
+        )
+        await self.repository.refresh_review(review)
+        return self._review_response(order, review)
+
+    @staticmethod
+    def _review_response(order: Order, review: Review) -> ReviewResponse:
+        reviewer_name = (
+            order.buyer_display_name_snapshot
+            if review.reviewer_id == order.buyer_id
+            else order.seller_display_name_snapshot
+        )
+        return ReviewResponse(
+            id=review.id,
+            reviewer_id=review.reviewer_id,
+            reviewer_name=reviewer_name,
+            reviewee_id=review.reviewee_id,
+            rating=review.rating,
+            tags=review.tags,
+            content=review.content,
+            created_at=review.created_at,
+        )
+
+    @staticmethod
+    def _encode_cursor(order: Order) -> str:
+        value = json.dumps({"created_at": order.created_at.isoformat(), "id": str(order.id)})
+        return base64.urlsafe_b64encode(value.encode()).decode().rstrip("=")
+
+    @staticmethod
+    def _decode_cursor(value: str) -> tuple[datetime, UUID]:
+        try:
+            padded = value + "=" * (-len(value) % 4)
+            data = json.loads(base64.urlsafe_b64decode(padded).decode())
+            if not isinstance(data, dict):
+                raise ValueError
+            return datetime.fromisoformat(data["created_at"]), UUID(data["id"])
+        except (binascii.Error, KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
+            raise AppError(status_code=422, code="invalid_cursor", message="分页游标无效") from exc
 
     @staticmethod
     def _proposal_response(proposal: OrderMeetingProposal) -> MeetingProposalResponse:

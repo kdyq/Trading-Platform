@@ -134,8 +134,11 @@ async def _exercise_market_queries(database_url: str) -> None:
             await connection.execute(
                 text(
                     "INSERT INTO orders "
-                    "(id, product_id, buyer_id, seller_id, idempotency_key, amount, status) "
-                    "VALUES (:id, :product, :buyer, :seller, 'market-test', 18.50, 'completed')"
+                    "(id, product_id, buyer_id, seller_id, idempotency_key, amount, status, "
+                    "product_title_snapshot, campus_name_snapshot, buyer_display_name_snapshot, "
+                    "seller_display_name_snapshot, completed_at) VALUES "
+                    "(:id, :product, :buyer, :seller, 'market-test', 18.50, 'completed', "
+                    "'查询商品', '主校区', '买家', '卖家', now())"
                 ),
                 {
                     "id": order_id,
@@ -147,9 +150,12 @@ async def _exercise_market_queries(database_url: str) -> None:
             await connection.execute(
                 text(
                     "INSERT INTO orders "
-                    "(id, product_id, buyer_id, seller_id, idempotency_key, amount, status) "
+                    "(id, product_id, buyer_id, seller_id, idempotency_key, amount, status, "
+                    "product_title_snapshot, campus_name_snapshot, buyer_display_name_snapshot, "
+                    "seller_display_name_snapshot, completed_at) "
                     "VALUES (:id, :product, :buyer, :seller, "
-                    "'market-unrelated', 18.50, 'completed')"
+                    "'market-unrelated', 18.50, 'completed', "
+                    "'无关商品', '主校区', '买家', '其他卖家', now())"
                 ),
                 {
                     "id": unrelated_order_id,
@@ -180,9 +186,12 @@ async def _exercise_market_queries(database_url: str) -> None:
             await connection.execute(
                 text(
                     "INSERT INTO orders "
-                    "(id, product_id, buyer_id, seller_id, idempotency_key, amount, status) "
+                    "(id, product_id, buyer_id, seller_id, idempotency_key, amount, status, "
+                    "product_title_snapshot, campus_name_snapshot, buyer_display_name_snapshot, "
+                    "seller_display_name_snapshot) "
                     "VALUES (:id, :product, :buyer, :seller, "
-                    "'market-cancelled', 18.50, 'cancelled')"
+                    "'market-cancelled', 18.50, 'cancelled', "
+                    "'取消商品', '主校区', '买家', '卖家')"
                 ),
                 {
                     "id": cancelled_order_id,

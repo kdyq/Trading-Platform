@@ -15,8 +15,15 @@ from app.models.trade import (
     OrderEvent,
     OrderMeetingProposal,
     OrderStatus,
+    Review,
 )
-from app.schemas.orders import MeetingProposalCreate, OrderCancel, OrderCreate, OrderDispute
+from app.schemas.orders import (
+    MeetingProposalCreate,
+    OrderCancel,
+    OrderCreate,
+    OrderDispute,
+    ReviewCreate,
+)
 from app.services.orders import OrderService
 
 
@@ -114,6 +121,57 @@ class FakeOrderRepository:
     def add_dispute_report(self, report):  # type: ignore[no-untyped-def]
         self.reports.append(report)
 
+    async def list_orders(  # type: ignore[no-untyped-def]
+        self, *, user_id, role, status, before_created_at, before_id, limit
+    ):
+        orders = [
+            order
+            for order in self.orders.values()
+            if (order.buyer_id if role == "buying" else order.seller_id) == user_id
+            and (status is None or order.status == status)
+        ]
+        orders.sort(key=lambda order: (order.created_at, order.id), reverse=True)
+        if before_created_at is not None and before_id is not None:
+            orders = [
+                order
+                for order in orders
+                if (order.created_at, order.id) < (before_created_at, before_id)
+            ]
+        return [(order, None) for order in orders[:limit]]
+
+    async def list_order_events(self, order_id):  # type: ignore[no-untyped-def]
+        return [event for event in self.events if event.order_id == order_id]
+
+    async def list_meeting_proposals(self, order_id):  # type: ignore[no-untyped-def]
+        return [proposal for proposal in self.proposals.values() if proposal.order_id == order_id]
+
+    async def list_reviews(self, order_id):  # type: ignore[no-untyped-def]
+        return [
+            review
+            for review in getattr(self, "reviews", [])
+            if review.order_id == order_id and review.is_visible
+        ]
+
+    async def get_review(self, order_id, reviewer_id):  # type: ignore[no-untyped-def]
+        return next(
+            (
+                review
+                for review in getattr(self, "reviews", [])
+                if review.order_id == order_id and review.reviewer_id == reviewer_id
+            ),
+            None,
+        )
+
+    def add_review(self, review):  # type: ignore[no-untyped-def]
+        if not hasattr(self, "reviews"):
+            self.reviews: list[Review] = []
+        self.reviews.append(review)
+
+    async def refresh_review(self, review):  # type: ignore[no-untyped-def]
+        now = datetime.now(UTC)
+        review.created_at = now
+        review.updated_at = now
+
     async def find_command(self, actor_id, client_action_id):  # type: ignore[no-untyped-def]
         return self.commands.get((actor_id, client_action_id))
 
@@ -129,6 +187,8 @@ class FakeOrderRepository:
             note=note,
             event_data=event_data or {},
         )
+        event.created_at = datetime.now(UTC)
+        event.updated_at = event.created_at
         self.events.append(event)
         return event
 
@@ -488,3 +548,117 @@ async def test_dispute_freezes_order_and_creates_one_moderation_entry() -> None:
             client_action_id="dispute_complete_1",
         )
     assert cannot_complete.value.code == "invalid_order_state"
+
+
+@pytest.mark.anyio
+async def test_order_list_detail_and_bidirectional_reviews_respect_rules() -> None:
+    repository = FakeOrderRepository()
+    service = OrderService(repository)
+    created = await service.create(
+        user_id=repository.buyer_id,
+        campus_status=CampusVerificationStatus.VERIFIED,
+        payload=OrderCreate(product_id=repository.product_id, idempotency_key="review_create_1"),
+    )
+    await service.accept(
+        user_id=repository.seller_id,
+        campus_status=CampusVerificationStatus.VERIFIED,
+        order_id=created.id,
+        client_action_id="review_accept_1",
+    )
+    await service.mark_delivered(
+        user_id=repository.seller_id,
+        campus_status=CampusVerificationStatus.VERIFIED,
+        order_id=created.id,
+        client_action_id="review_deliver_1",
+    )
+    await service.complete(
+        user_id=repository.buyer_id,
+        campus_status=CampusVerificationStatus.VERIFIED,
+        order_id=created.id,
+        client_action_id="review_complete_1",
+    )
+
+    buying = await service.list_orders(
+        user_id=repository.buyer_id,
+        role="buying",
+        status=OrderStatus.COMPLETED,
+        cursor=None,
+        limit=20,
+    )
+    assert len(buying.items) == 1
+    assert buying.items[0].counterparty_name == "卖家"
+    assert not hasattr(buying.items[0], "location_text")
+
+    detail_before = await service.detail(user_id=repository.buyer_id, order_id=created.id)
+    assert detail_before.can_review
+    buyer_review = await service.create_review(
+        user_id=repository.buyer_id,
+        campus_status=CampusVerificationStatus.VERIFIED,
+        order_id=created.id,
+        payload=ReviewCreate(
+            rating=5,
+            tags=["item_as_described", "on_time"],
+            content="商品与描述一致，面交顺利",
+        ),
+    )
+    seller_review = await service.create_review(
+        user_id=repository.seller_id,
+        campus_status=CampusVerificationStatus.VERIFIED,
+        order_id=created.id,
+        payload=ReviewCreate(rating=5, tags=["good_communication"]),
+    )
+    assert buyer_review.reviewee_id == repository.seller_id
+    assert seller_review.reviewee_id == repository.buyer_id
+
+    with pytest.raises(AppError) as duplicate:
+        await service.create_review(
+            user_id=repository.buyer_id,
+            campus_status=CampusVerificationStatus.VERIFIED,
+            order_id=created.id,
+            payload=ReviewCreate(rating=4),
+        )
+    assert duplicate.value.code == "review_already_exists"
+    detail_after = await service.detail(user_id=repository.buyer_id, order_id=created.id)
+    assert not detail_after.can_review
+    assert len(detail_after.reviews) == 2
+
+
+@pytest.mark.anyio
+async def test_reviews_reject_unfinished_expired_and_invalid_tags() -> None:
+    repository = FakeOrderRepository()
+    service = OrderService(repository)
+    created = await service.create(
+        user_id=repository.buyer_id,
+        campus_status=CampusVerificationStatus.VERIFIED,
+        payload=OrderCreate(product_id=repository.product_id, idempotency_key="review_rules_1"),
+    )
+    with pytest.raises(AppError) as unfinished:
+        await service.create_review(
+            user_id=repository.buyer_id,
+            campus_status=CampusVerificationStatus.VERIFIED,
+            order_id=created.id,
+            payload=ReviewCreate(rating=5),
+        )
+    assert unfinished.value.code == "order_not_reviewable"
+
+    order = repository.orders[created.id]
+    order.status = OrderStatus.COMPLETED
+    order.completed_at = datetime.now(UTC) - timedelta(days=31)
+    with pytest.raises(AppError) as expired:
+        await service.create_review(
+            user_id=repository.buyer_id,
+            campus_status=CampusVerificationStatus.VERIFIED,
+            order_id=created.id,
+            payload=ReviewCreate(rating=5),
+        )
+    assert expired.value.code == "review_window_closed"
+
+    order.completed_at = datetime.now(UTC)
+    with pytest.raises(AppError) as invalid_tag:
+        await service.create_review(
+            user_id=repository.buyer_id,
+            campus_status=CampusVerificationStatus.VERIFIED,
+            order_id=created.id,
+            payload=ReviewCreate(rating=5, tags=["private_location"]),
+        )
+    assert invalid_tag.value.code == "invalid_review_tag"

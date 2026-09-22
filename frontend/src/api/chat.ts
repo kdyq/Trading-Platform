@@ -11,6 +11,7 @@ export interface ConversationSummary {
   last_message_at: string | null
   last_message_preview: string | null
   unread_count: number
+  is_buyer: boolean
 }
 
 export interface ChatMessage {

@@ -23,6 +23,7 @@ class ConversationSummary(BaseModel):
     last_message_at: datetime | None
     last_message_preview: str | None
     unread_count: int = Field(ge=0)
+    is_buyer: bool
 
 
 class ConversationListResponse(BaseModel):

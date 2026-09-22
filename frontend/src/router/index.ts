@@ -69,8 +69,12 @@ const router = createRouter({
         {
           path: 'orders',
           name: 'orders',
-          component: () => import('../views/AccountCollectionView.vue'),
-          meta: { title: '我的订单', description: '订单功能将在交易阶段开放。' },
+          component: () => import('../views/OrdersView.vue'),
+        },
+        {
+          path: 'orders/:id',
+          name: 'order-detail',
+          component: () => import('../views/OrderDetailView.vue'),
         },
         {
           path: ':pathMatch(.*)*',

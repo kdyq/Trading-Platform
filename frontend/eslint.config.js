@@ -19,6 +19,8 @@ export default tseslint.config(
     },
     rules: {
       'vue/max-attributes-per-line': 'off',
+      'vue/html-closing-bracket-newline': 'off',
+      'vue/html-indent': 'off',
       'vue/html-self-closing': 'off',
       'vue/multi-word-component-names': 'off',
       'vue/singleline-html-element-content-newline': 'off',

@@ -1,6 +1,6 @@
 import asyncio
 import os
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from sqlalchemy import func, select, text, update
@@ -11,9 +11,10 @@ from app.db.url import database_url_for_sqlalchemy, require_project_database
 from app.models import Base
 from app.models.catalog import Product, ProductStatus
 from app.models.identity import CampusVerificationStatus
-from app.models.trade import Order, OrderEvent, OrderStatus
+from app.models.trade import Order, OrderEvent, OrderStatus, Review
+from app.repositories.market import SqlAlchemyMarketRepository
 from app.repositories.orders import SqlAlchemyOrderRepository
-from app.schemas.orders import OrderCancel, OrderCreate
+from app.schemas.orders import OrderCancel, OrderCreate, OrderResponse, ReviewCreate
 from app.services.orders import OrderService
 from app.workers.order_expiration import OrderExpirationCoordinator
 
@@ -107,7 +108,7 @@ async def _exercise_concurrent_accept(database_url: str) -> None:
 
         factory = async_sessionmaker(engine, expire_on_commit=False)
 
-        async def create_order(buyer_id, key):  # type: ignore[no-untyped-def]
+        async def create_order(buyer_id: UUID, key: str) -> OrderResponse:
             async with factory.begin() as session:
                 return await OrderService(SqlAlchemyOrderRepository(session)).create(
                     user_id=buyer_id,
@@ -122,7 +123,7 @@ async def _exercise_concurrent_accept(database_url: str) -> None:
         assert first.amount == second.amount
         assert first.product_title == "并发预留商品"
 
-        async def accept(order_id, action_id):  # type: ignore[no-untyped-def]
+        async def accept(order_id: UUID, action_id: str) -> str:
             try:
                 async with factory.begin() as session:
                     result = await OrderService(SqlAlchemyOrderRepository(session)).accept(
@@ -223,6 +224,57 @@ async def _exercise_concurrent_accept(database_url: str) -> None:
             assert final_order.completed_at is not None
             assert final_product is not None and final_product.status == ProductStatus.SOLD
             assert final_product.sold_at is not None
+
+        async with factory.begin() as session:
+            order_service = OrderService(SqlAlchemyOrderRepository(session))
+            buying = await order_service.list_orders(
+                user_id=second_buyer_id,
+                role="buying",
+                status=OrderStatus.COMPLETED,
+                cursor=None,
+                limit=1,
+            )
+            assert [item.id for item in buying.items] == [completed_candidate.id]
+            assert buying.items[0].image_url is None
+            buyer_review = await order_service.create_review(
+                user_id=second_buyer_id,
+                campus_status=CampusVerificationStatus.VERIFIED,
+                order_id=completed_candidate.id,
+                payload=ReviewCreate(
+                    rating=5,
+                    tags=["item_as_described"],
+                    content="商品与描述一致",
+                ),
+            )
+            await order_service.create_review(
+                user_id=seller_id,
+                campus_status=CampusVerificationStatus.VERIFIED,
+                order_id=completed_candidate.id,
+                payload=ReviewCreate(rating=4, tags=["good_communication"]),
+            )
+            detail = await order_service.detail(
+                user_id=second_buyer_id, order_id=completed_candidate.id
+            )
+            assert not detail.can_review
+            assert len(detail.reviews) == 2
+            assert all(not hasattr(item, "location_text") for item in buying.items)
+
+        async with factory() as session:
+            public_product = await SqlAlchemyMarketRepository(session).get_product(product_id)
+            assert public_product is not None
+            assert public_product.seller_review_count == 1
+            assert public_product.seller_average_rating == 5
+        async with factory.begin() as session:
+            await session.execute(
+                update(Review)
+                .where(Review.id == buyer_review.id)
+                .values(is_visible=False, hidden_at=func.now())
+            )
+        async with factory() as session:
+            moderated_product = await SqlAlchemyMarketRepository(session).get_product(product_id)
+            assert moderated_product is not None
+            assert moderated_product.seller_review_count == 0
+            assert moderated_product.seller_average_rating is None
     finally:
         await engine.dispose()
         async with admin_engine.begin() as connection:

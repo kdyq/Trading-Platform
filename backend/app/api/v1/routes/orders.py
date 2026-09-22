@@ -1,18 +1,23 @@
-from typing import Annotated
+from typing import Annotated, Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 
 from app.api.dependencies import get_order_service
 from app.api.v1.routes.auth import get_auth_context
+from app.models.trade import OrderStatus
 from app.schemas.orders import (
     MeetingProposalCreate,
     MeetingProposalResponse,
     OrderAction,
     OrderCancel,
     OrderCreate,
+    OrderDetailResponse,
     OrderDispute,
+    OrderListResponse,
     OrderResponse,
+    ReviewCreate,
+    ReviewResponse,
 )
 from app.services.auth import AuthContext
 from app.services.orders import OrderService
@@ -138,6 +143,48 @@ async def dispute_order(
     service: Annotated[OrderService, Depends(get_order_service)],
 ) -> OrderResponse:
     return await service.dispute(
+        user_id=context.user.id,
+        campus_status=context.campus_verification_status,
+        order_id=order_id,
+        payload=payload,
+    )
+
+
+@router.get("", response_model=OrderListResponse)
+async def list_orders(
+    context: Annotated[AuthContext, Depends(get_auth_context)],
+    service: Annotated[OrderService, Depends(get_order_service)],
+    role: Literal["buying", "selling"] = "buying",
+    status: OrderStatus | None = None,
+    cursor: Annotated[str | None, Query(min_length=1, max_length=1000)] = None,
+    limit: Annotated[int, Query(ge=1, le=50)] = 20,
+) -> OrderListResponse:
+    return await service.list_orders(
+        user_id=context.user.id,
+        role=role,
+        status=status,
+        cursor=cursor,
+        limit=limit,
+    )
+
+
+@router.get("/{order_id}", response_model=OrderDetailResponse)
+async def order_detail(
+    order_id: UUID,
+    context: Annotated[AuthContext, Depends(get_auth_context)],
+    service: Annotated[OrderService, Depends(get_order_service)],
+) -> OrderDetailResponse:
+    return await service.detail(user_id=context.user.id, order_id=order_id)
+
+
+@router.post("/{order_id}/reviews", response_model=ReviewResponse, status_code=201)
+async def create_review(
+    order_id: UUID,
+    payload: ReviewCreate,
+    context: Annotated[AuthContext, Depends(get_auth_context)],
+    service: Annotated[OrderService, Depends(get_order_service)],
+) -> ReviewResponse:
+    return await service.create_review(
         user_id=context.user.id,
         campus_status=context.campus_verification_status,
         order_id=order_id,

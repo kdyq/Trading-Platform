@@ -212,7 +212,7 @@ class Review(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     reviewee_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"))
     rating: Mapped[int]
     content: Mapped[str | None] = mapped_column(Text)
-    tags: Mapped[list[str]] = mapped_column(JSON, default=list)
+    tags: Mapped[list[str]] = mapped_column(JSON, default=list, server_default=text("'[]'::json"))
     is_visible: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
     hidden_at: Mapped[datetime | None]
 

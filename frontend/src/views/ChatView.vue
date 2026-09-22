@@ -13,6 +13,7 @@ import {
   sendMessage,
 } from '../api/chat'
 import type { ChatMessage, ConversationSummary } from '../api/chat'
+import { createOrder } from '../api/orders'
 import UiButton from '../components/ui/UiButton.vue'
 import { useAuthStore } from '../stores/auth'
 
@@ -36,6 +37,7 @@ const reportingMessage = ref<DisplayMessage | null>(null)
 const reportReason = ref<'harassment' | 'fraud' | 'spam' | 'unsafe' | 'other'>('harassment')
 const reportDetails = ref('')
 const connection = ref<'connecting' | 'live' | 'retrying' | 'offline'>('offline')
+const orderBusy = ref(false)
 const composer = ref<HTMLTextAreaElement | null>(null)
 let socket: WebSocket | null = null
 let heartbeat: number | undefined
@@ -186,6 +188,20 @@ async function blockCurrentUser() {
     notice.value = '已屏蔽该用户。历史消息仍会保留作为必要证据。'
   } catch (caught) {
     error.value = caught instanceof Error ? caught.message : '屏蔽操作失败'
+  }
+}
+
+async function startOrderFromChat() {
+  if (!auth.accessToken || !selected.value || orderBusy.value || !selected.value.is_buyer) return
+  orderBusy.value = true
+  error.value = ''
+  try {
+    const order = await createOrder(auth.accessToken, selected.value.product_id, selected.value.id)
+    await router.push(`/orders/${order.id}`)
+  } catch (caught) {
+    error.value = caught instanceof Error ? caught.message : '暂时无法发起交易'
+  } finally {
+    orderBusy.value = false
   }
 }
 
@@ -388,8 +404,14 @@ onUnmounted(() => {
               {{ selected.product_title }} · ¥{{ selected.product_price }}
             </RouterLink>
           </div>
-          <button class="order-entry" type="button" disabled title="交易功能将在下一阶段开放">
-            发起交易
+          <button
+            v-if="selected.is_buyer"
+            class="order-entry"
+            type="button"
+            :disabled="orderBusy || selected.product_status !== 'on_sale'"
+            @click="startOrderFromChat"
+          >
+            {{ orderBusy ? '创建中…' : '发起交易' }}
           </button>
           <button class="safety-entry" type="button" @click="blockCurrentUser">屏蔽</button>
         </header>

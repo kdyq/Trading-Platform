@@ -39,9 +39,7 @@ def upgrade() -> None:
     op.drop_constraint(
         op.f("ck_order_events_order_event_from_status"), "order_events", type_="check"
     )
-    op.drop_constraint(
-        op.f("ck_order_events_order_event_to_status"), "order_events", type_="check"
-    )
+    op.drop_constraint(op.f("ck_order_events_order_event_to_status"), "order_events", type_="check")
     op.create_check_constraint("order_status", "orders", status_check("status", ORDER_STATUSES))
     op.create_check_constraint(
         "order_event_from_status",
@@ -270,9 +268,7 @@ def downgrade() -> None:
         "conversation_id",
     ):
         op.drop_column("orders", column)
-    op.drop_constraint(
-        op.f("ck_order_events_order_event_to_status"), "order_events", type_="check"
-    )
+    op.drop_constraint(op.f("ck_order_events_order_event_to_status"), "order_events", type_="check")
     op.drop_constraint(
         op.f("ck_order_events_order_event_from_status"), "order_events", type_="check"
     )

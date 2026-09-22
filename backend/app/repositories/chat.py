@@ -39,6 +39,7 @@ class ConversationRecord:
     last_message_at: datetime | None
     last_message_preview: str | None
     unread_count: int
+    is_buyer: bool
 
 
 @dataclass(frozen=True)
@@ -258,6 +259,7 @@ class SqlAlchemyChatRepository:
                 Conversation.last_message_at,
                 last_preview.label("last_message_preview"),
                 unread_count.label("unread_count"),
+                (Conversation.buyer_id == user_id).label("is_buyer"),
             )
             .join(Product, Product.id == Conversation.product_id)
             .join(other_user, other_user.id == other_id)

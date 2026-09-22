@@ -7,7 +7,7 @@ from sqlalchemy import or_, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.catalog import Product
+from app.models.catalog import Product, ProductImage
 from app.models.identity import (
     Campus,
     CampusVerification,
@@ -28,6 +28,7 @@ from app.models.trade import (
     OrderEvent,
     OrderMeetingProposal,
     OrderStatus,
+    Review,
 )
 
 
@@ -65,6 +66,29 @@ class OrderRepository(Protocol):
     async def claim_expired_pending(self, limit: int) -> Sequence[Order]: ...
 
     def add_dispute_report(self, report: Report) -> None: ...
+
+    async def list_orders(
+        self,
+        *,
+        user_id: UUID,
+        role: str,
+        status: OrderStatus | None,
+        before_created_at: datetime | None,
+        before_id: UUID | None,
+        limit: int,
+    ) -> Sequence[tuple[Order, UUID | None]]: ...
+
+    async def list_order_events(self, order_id: UUID) -> Sequence[OrderEvent]: ...
+
+    async def list_meeting_proposals(self, order_id: UUID) -> Sequence[OrderMeetingProposal]: ...
+
+    async def list_reviews(self, order_id: UUID) -> Sequence[Review]: ...
+
+    async def get_review(self, order_id: UUID, reviewer_id: UUID) -> Review | None: ...
+
+    def add_review(self, review: Review) -> None: ...
+
+    async def refresh_review(self, review: Review) -> None: ...
 
     async def find_command(self, actor_id: UUID, client_action_id: str) -> OrderCommand | None: ...
 
@@ -259,6 +283,86 @@ class SqlAlchemyOrderRepository:
 
     def add_dispute_report(self, report: Report) -> None:
         self.session.add(report)
+
+    async def list_orders(
+        self,
+        *,
+        user_id: UUID,
+        role: str,
+        status: OrderStatus | None,
+        before_created_at: datetime | None,
+        before_id: UUID | None,
+        limit: int,
+    ) -> Sequence[tuple[Order, UUID | None]]:
+        image_id = (
+            select(ProductImage.id)
+            .where(ProductImage.product_id == Order.product_id, ProductImage.deleted_at.is_(None))
+            .order_by(ProductImage.display_order, ProductImage.created_at, ProductImage.id)
+            .limit(1)
+            .correlate(Order)
+            .scalar_subquery()
+        )
+        query = select(Order, image_id.label("image_id")).where(
+            Order.buyer_id == user_id if role == "buying" else Order.seller_id == user_id
+        )
+        if status is not None:
+            query = query.where(Order.status == status)
+        if before_created_at is not None and before_id is not None:
+            query = query.where(
+                or_(
+                    Order.created_at < before_created_at,
+                    (Order.created_at == before_created_at) & (Order.id < before_id),
+                )
+            )
+        rows = await self.session.execute(
+            query.order_by(Order.created_at.desc(), Order.id.desc()).limit(limit)
+        )
+        return [(row[0], row[1]) for row in rows]
+
+    async def list_order_events(self, order_id: UUID) -> Sequence[OrderEvent]:
+        return list(
+            await self.session.scalars(
+                select(OrderEvent)
+                .where(OrderEvent.order_id == order_id)
+                .order_by(OrderEvent.created_at, OrderEvent.id)
+            )
+        )
+
+    async def list_meeting_proposals(self, order_id: UUID) -> Sequence[OrderMeetingProposal]:
+        return list(
+            await self.session.scalars(
+                select(OrderMeetingProposal)
+                .where(OrderMeetingProposal.order_id == order_id)
+                .order_by(OrderMeetingProposal.created_at, OrderMeetingProposal.id)
+            )
+        )
+
+    async def list_reviews(self, order_id: UUID) -> Sequence[Review]:
+        return list(
+            await self.session.scalars(
+                select(Review)
+                .where(Review.order_id == order_id, Review.is_visible.is_(True))
+                .order_by(Review.created_at, Review.id)
+            )
+        )
+
+    async def get_review(self, order_id: UUID, reviewer_id: UUID) -> Review | None:
+        return cast(
+            Review | None,
+            await self.session.scalar(
+                select(Review).where(
+                    Review.order_id == order_id,
+                    Review.reviewer_id == reviewer_id,
+                )
+            ),
+        )
+
+    def add_review(self, review: Review) -> None:
+        self.session.add(review)
+
+    async def refresh_review(self, review: Review) -> None:
+        await self.session.flush()
+        await self.session.refresh(review)
 
     async def find_command(self, actor_id: UUID, client_action_id: str) -> OrderCommand | None:
         return cast(

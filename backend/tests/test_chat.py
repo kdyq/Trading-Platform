@@ -77,6 +77,7 @@ class FakeChatRepository:
                 last_message_at=self.messages[-1].created_at if self.messages else None,
                 last_message_preview=self.messages[-1].body if self.messages else None,
                 unread_count=0,
+                is_buyer=user_id == self.buyer_id,
             )
         ]
         return [item for item in records if conversation_id in {None, item.id}]

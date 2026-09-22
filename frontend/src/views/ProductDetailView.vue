@@ -6,6 +6,7 @@ import { createConversation } from '../api/chat'
 import { ApiError } from '../api/client'
 import { addFavorite, getFavoriteStatus, getProductDetail, removeFavorite } from '../api/market'
 import type { PublicProductDetail } from '../api/market'
+import { createOrder } from '../api/orders'
 import ProductCard from '../components/market/ProductCard.vue'
 import ProductGallery from '../components/market/ProductGallery.vue'
 import UiButton from '../components/ui/UiButton.vue'
@@ -24,6 +25,7 @@ const favorited = ref(false)
 const favoriteCount = ref(0)
 const favoriteBusy = ref(false)
 const contactBusy = ref(false)
+const orderBusy = ref(false)
 const gate = ref<'login' | 'verification' | 'later' | null>(null)
 const gateIntent = ref<'action' | 'report'>('action')
 let controller: AbortController | undefined
@@ -59,6 +61,9 @@ const actionDisabled = computed(
 )
 const favoriteDisabled = computed(
   () => !product.value || isOwner.value || product.value.status === 'sold',
+)
+const orderDisabled = computed(
+  () => !product.value || isOwner.value || product.value.status !== 'on_sale',
 )
 const disabledReason = computed(() => {
   if (isOwner.value) return '这是你发布的商品'
@@ -111,6 +116,28 @@ async function contactSeller() {
     error.value = caught instanceof Error ? caught.message : '暂时无法联系卖家'
   } finally {
     contactBusy.value = false
+  }
+}
+
+async function startOrder() {
+  if (orderDisabled.value || !product.value) return
+  if (!auth.user) {
+    gate.value = 'login'
+    return
+  }
+  if (auth.user.campus_verification_status !== 'verified') {
+    gate.value = 'verification'
+    return
+  }
+  if (!auth.accessToken || orderBusy.value) return
+  orderBusy.value = true
+  try {
+    const order = await createOrder(auth.accessToken, product.value.id)
+    await router.push(`/orders/${order.id}`)
+  } catch (caught) {
+    error.value = caught instanceof Error ? caught.message : '暂时无法发起交易'
+  } finally {
+    orderBusy.value = false
   }
 }
 
@@ -248,8 +275,19 @@ onUnmounted(() => {
             >
               {{ favorited ? '取消收藏' : '收藏' }} · {{ favoriteCount }}
             </UiButton>
-            <UiButton :disabled="actionDisabled || contactBusy" @click="contactSeller">
-              {{ contactBusy ? '正在建立会话…' : '联系卖家 / 发起交易' }}
+            <UiButton
+              :variant="orderDisabled ? 'primary' : 'secondary'"
+              :disabled="actionDisabled || contactBusy"
+              @click="contactSeller"
+            >
+              {{ contactBusy ? '正在建立会话…' : '联系卖家' }}
+            </UiButton>
+            <UiButton
+              v-if="product.status === 'on_sale'"
+              :disabled="orderDisabled || orderBusy"
+              @click="startOrder"
+            >
+              {{ orderBusy ? '正在创建订单…' : '直接发起交易' }}
             </UiButton>
           </div>
           <p v-if="disabledReason" class="action-disabled-reason">{{ disabledReason }}</p>
@@ -308,7 +346,7 @@ onUnmounted(() => {
             </div>
             <div>
               <strong class="num">
-                {{ product.seller.average_rating ?? '—' }}
+                {{ product.seller.average_rating ?? '暂无' }}
               </strong>
               <span>平均评分</span>
             </div>
