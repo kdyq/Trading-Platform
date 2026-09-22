@@ -3,7 +3,7 @@ from datetime import UTC, datetime
 from typing import Protocol, cast
 from uuid import UUID, uuid4
 
-from sqlalchemy import or_, select, update
+from sqlalchemy import or_, select, text, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -47,6 +47,10 @@ class OrderRepository(Protocol):
 
     async def create_order(self, order: Order) -> tuple[Order, bool]: ...
 
+    async def find_order_by_idempotency(
+        self, buyer_id: UUID, idempotency_key: str
+    ) -> Order | None: ...
+
     async def get_order(self, order_id: UUID, *, for_update: bool = False) -> Order | None: ...
 
     async def refresh_order(self, order: Order) -> None: ...
@@ -73,7 +77,7 @@ class OrderRepository(Protocol):
         user_id: UUID,
         role: str,
         status: OrderStatus | None,
-        before_created_at: datetime | None,
+        before_updated_at: datetime | None,
         before_id: UUID | None,
         limit: int,
     ) -> Sequence[tuple[Order, UUID | None]]: ...
@@ -91,6 +95,8 @@ class OrderRepository(Protocol):
     async def refresh_review(self, review: Review) -> None: ...
 
     async def find_command(self, actor_id: UUID, client_action_id: str) -> OrderCommand | None: ...
+
+    async def lock_command_key(self, actor_id: UUID, client_action_id: str) -> None: ...
 
     def add_event(
         self,
@@ -206,17 +212,39 @@ class SqlAlchemyOrderRepository:
                 status=order.status,
                 expires_at=order.expires_at,
             )
-            .on_conflict_do_nothing(constraint="uq_orders_buyer_idempotency")
+            .on_conflict_do_nothing()
             .returning(Order.id)
         )
-        stored = await self.session.scalar(
-            select(Order).where(
-                Order.buyer_id == order.buyer_id,
-                Order.idempotency_key == order.idempotency_key,
+        stored = await self.find_order_by_idempotency(order.buyer_id, order.idempotency_key)
+        if stored is None:
+            stored = await self.session.scalar(
+                select(Order).where(
+                    Order.buyer_id == order.buyer_id,
+                    Order.product_id == order.product_id,
+                    Order.status.in_(
+                        (
+                            OrderStatus.PENDING_SELLER_CONFIRMATION,
+                            OrderStatus.ACCEPTED,
+                            OrderStatus.SCHEDULED,
+                            OrderStatus.SELLER_DELIVERED,
+                            OrderStatus.DISPUTED,
+                        )
+                    ),
+                )
             )
-        )
         assert stored is not None
         return stored, inserted_id is not None
+
+    async def find_order_by_idempotency(self, buyer_id: UUID, idempotency_key: str) -> Order | None:
+        return cast(
+            Order | None,
+            await self.session.scalar(
+                select(Order).where(
+                    Order.buyer_id == buyer_id,
+                    Order.idempotency_key == idempotency_key,
+                )
+            ),
+        )
 
     async def get_order(self, order_id: UUID, *, for_update: bool = False) -> Order | None:
         query = select(Order).where(Order.id == order_id)
@@ -290,7 +318,7 @@ class SqlAlchemyOrderRepository:
         user_id: UUID,
         role: str,
         status: OrderStatus | None,
-        before_created_at: datetime | None,
+        before_updated_at: datetime | None,
         before_id: UUID | None,
         limit: int,
     ) -> Sequence[tuple[Order, UUID | None]]:
@@ -307,15 +335,15 @@ class SqlAlchemyOrderRepository:
         )
         if status is not None:
             query = query.where(Order.status == status)
-        if before_created_at is not None and before_id is not None:
+        if before_updated_at is not None and before_id is not None:
             query = query.where(
                 or_(
-                    Order.created_at < before_created_at,
-                    (Order.created_at == before_created_at) & (Order.id < before_id),
+                    Order.updated_at < before_updated_at,
+                    (Order.updated_at == before_updated_at) & (Order.id < before_id),
                 )
             )
         rows = await self.session.execute(
-            query.order_by(Order.created_at.desc(), Order.id.desc()).limit(limit)
+            query.order_by(Order.updated_at.desc(), Order.id.desc()).limit(limit)
         )
         return [(row[0], row[1]) for row in rows]
 
@@ -375,6 +403,12 @@ class SqlAlchemyOrderRepository:
             ),
         )
 
+    async def lock_command_key(self, actor_id: UUID, client_action_id: str) -> None:
+        await self.session.execute(
+            text("SELECT pg_advisory_xact_lock(hashtextextended(:command_key, 0))"),
+            {"command_key": f"{actor_id}:{client_action_id}"},
+        )
+
     def add_event(
         self,
         *,
@@ -385,6 +419,7 @@ class SqlAlchemyOrderRepository:
         note: str | None,
         event_data: dict[str, object] | None = None,
     ) -> OrderEvent:
+        order.updated_at = datetime.now(UTC)
         event = OrderEvent(
             id=uuid4(),
             order_id=order.id,

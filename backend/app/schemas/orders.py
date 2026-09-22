@@ -2,7 +2,7 @@ from datetime import datetime
 from decimal import Decimal
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class OrderCreate(BaseModel):
@@ -18,6 +18,11 @@ class OrderAction(BaseModel):
 class MeetingProposalCreate(OrderAction):
     proposed_for: datetime
     location_text: str = Field(min_length=2, max_length=200)
+
+    @field_validator("location_text", mode="before")
+    @classmethod
+    def strip_location_text(cls, value: object) -> object:
+        return value.strip() if isinstance(value, str) else value
 
 
 class OrderCancel(OrderAction):
@@ -75,6 +80,7 @@ class OrderSummary(BaseModel):
     image_url: str | None
     scheduled_for: datetime | None
     created_at: datetime
+    updated_at: datetime
 
 
 class OrderListResponse(BaseModel):

@@ -73,12 +73,35 @@ class FakeOrderRepository:
         key = (order.buyer_id, order.idempotency_key)
         if key in self.idempotency:
             return self.orders[self.idempotency[key]], False
+        open_order = next(
+            (
+                stored
+                for stored in self.orders.values()
+                if stored.buyer_id == order.buyer_id
+                and stored.product_id == order.product_id
+                and stored.status
+                in {
+                    OrderStatus.PENDING_SELLER_CONFIRMATION,
+                    OrderStatus.ACCEPTED,
+                    OrderStatus.SCHEDULED,
+                    OrderStatus.SELLER_DELIVERED,
+                    OrderStatus.DISPUTED,
+                }
+            ),
+            None,
+        )
+        if open_order is not None:
+            return open_order, False
         now = datetime.now(UTC)
         order.created_at = now
         order.updated_at = now
         self.orders[order.id] = order
         self.idempotency[key] = order.id
         return order, True
+
+    async def find_order_by_idempotency(self, buyer_id, idempotency_key):  # type: ignore[no-untyped-def]
+        order_id = self.idempotency.get((buyer_id, idempotency_key))
+        return self.orders.get(order_id) if order_id else None
 
     async def get_order(self, order_id, *, for_update=False):  # type: ignore[no-untyped-def]
         return self.orders.get(order_id)
@@ -122,7 +145,7 @@ class FakeOrderRepository:
         self.reports.append(report)
 
     async def list_orders(  # type: ignore[no-untyped-def]
-        self, *, user_id, role, status, before_created_at, before_id, limit
+        self, *, user_id, role, status, before_updated_at, before_id, limit
     ):
         orders = [
             order
@@ -130,12 +153,12 @@ class FakeOrderRepository:
             if (order.buyer_id if role == "buying" else order.seller_id) == user_id
             and (status is None or order.status == status)
         ]
-        orders.sort(key=lambda order: (order.created_at, order.id), reverse=True)
-        if before_created_at is not None and before_id is not None:
+        orders.sort(key=lambda order: (order.updated_at, order.id), reverse=True)
+        if before_updated_at is not None and before_id is not None:
             orders = [
                 order
                 for order in orders
-                if (order.created_at, order.id) < (before_created_at, before_id)
+                if (order.updated_at, order.id) < (before_updated_at, before_id)
             ]
         return [(order, None) for order in orders[:limit]]
 
@@ -175,9 +198,13 @@ class FakeOrderRepository:
     async def find_command(self, actor_id, client_action_id):  # type: ignore[no-untyped-def]
         return self.commands.get((actor_id, client_action_id))
 
+    async def lock_command_key(self, actor_id, client_action_id):  # type: ignore[no-untyped-def]
+        return None
+
     def add_event(  # type: ignore[no-untyped-def]
         self, *, order, actor_id, from_status, to_status, note, event_data=None
     ):
+        order.updated_at = datetime.now(UTC)
         event = OrderEvent(
             id=uuid4(),
             order_id=order.id,
@@ -228,6 +255,62 @@ async def test_create_order_uses_server_snapshots_and_is_idempotent() -> None:
     assert created.payment_mode == "offline"
     assert len(repository.events) == 1
     assert repository.notifications[0]["recipient_id"] == repository.seller_id
+
+
+@pytest.mark.anyio
+async def test_create_order_retry_survives_reservation_and_new_key_is_rejected() -> None:
+    repository = FakeOrderRepository()
+    service = OrderService(repository)
+    original = OrderCreate(
+        product_id=repository.product_id,
+        idempotency_key="create_retry_original",
+    )
+    created = await service.create(
+        user_id=repository.buyer_id,
+        campus_status=CampusVerificationStatus.VERIFIED,
+        payload=original,
+    )
+    await service.accept(
+        user_id=repository.seller_id,
+        campus_status=CampusVerificationStatus.VERIFIED,
+        order_id=created.id,
+        client_action_id="create_retry_accept",
+    )
+
+    repeated = await service.create(
+        user_id=repository.buyer_id,
+        campus_status=CampusVerificationStatus.VERIFIED,
+        payload=original,
+    )
+    assert repeated.id == created.id
+
+    repository.product.status = ProductStatus.ON_SALE
+    with pytest.raises(AppError) as duplicate:
+        await service.create(
+            user_id=repository.buyer_id,
+            campus_status=CampusVerificationStatus.VERIFIED,
+            payload=OrderCreate(
+                product_id=repository.product_id,
+                idempotency_key="create_retry_new_key",
+            ),
+        )
+    assert duplicate.value.code == "order_already_exists"
+
+
+def test_meeting_location_is_trimmed_before_length_validation() -> None:
+    with pytest.raises(ValueError):
+        MeetingProposalCreate(
+            client_action_id="blank_location_1",
+            proposed_for=datetime.now(UTC) + timedelta(days=1),
+            location_text="   ",
+        )
+
+    payload = MeetingProposalCreate(
+        client_action_id="trim_location_1",
+        proposed_for=datetime.now(UTC) + timedelta(days=1),
+        location_text="  图书馆东门  ",
+    )
+    assert payload.location_text == "图书馆东门"
 
 
 @pytest.mark.anyio
@@ -621,6 +704,60 @@ async def test_order_list_detail_and_bidirectional_reviews_respect_rules() -> No
     detail_after = await service.detail(user_id=repository.buyer_id, order_id=created.id)
     assert not detail_after.can_review
     assert len(detail_after.reviews) == 2
+
+
+@pytest.mark.anyio
+async def test_order_list_uses_updated_at_for_stable_cursor_ordering() -> None:
+    repository = FakeOrderRepository()
+    service = OrderService(repository)
+    created = await service.create(
+        user_id=repository.buyer_id,
+        campus_status=CampusVerificationStatus.VERIFIED,
+        payload=OrderCreate(product_id=repository.product_id, idempotency_key="sorting_create_1"),
+    )
+    first = repository.orders[created.id]
+    now = datetime.now(UTC)
+    first.created_at = now - timedelta(days=2)
+    first.updated_at = now
+    second = Order(
+        id=uuid4(),
+        product_id=uuid4(),
+        conversation_id=None,
+        buyer_id=repository.buyer_id,
+        seller_id=repository.seller_id,
+        idempotency_key="sorting_create_2",
+        amount=Decimal("20.00"),
+        product_title_snapshot="较晚创建但较早更新的商品",
+        campus_name_snapshot="东校区",
+        buyer_display_name_snapshot="买家",
+        seller_display_name_snapshot="卖家",
+        payment_mode="offline",
+        status=OrderStatus.PENDING_SELLER_CONFIRMATION,
+        expires_at=now + timedelta(hours=12),
+    )
+    second.created_at = now - timedelta(days=1)
+    second.updated_at = now - timedelta(hours=1)
+    repository.orders[second.id] = second
+
+    page_one = await service.list_orders(
+        user_id=repository.buyer_id,
+        role="buying",
+        status=None,
+        cursor=None,
+        limit=1,
+    )
+    assert [item.id for item in page_one.items] == [first.id]
+    assert page_one.items[0].updated_at == first.updated_at
+    assert page_one.next_cursor is not None
+
+    page_two = await service.list_orders(
+        user_id=repository.buyer_id,
+        role="buying",
+        status=None,
+        cursor=page_one.next_cursor,
+        limit=1,
+    )
+    assert [item.id for item in page_two.items] == [second.id]
 
 
 @pytest.mark.anyio

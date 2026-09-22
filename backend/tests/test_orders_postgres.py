@@ -1,5 +1,6 @@
 import asyncio
 import os
+from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
 import pytest
@@ -37,6 +38,7 @@ async def _exercise_concurrent_accept(database_url: str) -> None:
         connect_args={"server_settings": {"timezone": "UTC", "search_path": schema}},
     )
     school_id, campus_id, category_id, product_id = uuid4(), uuid4(), uuid4(), uuid4()
+    command_product_ids = (uuid4(), uuid4())
     seller_id, first_buyer_id, second_buyer_id = uuid4(), uuid4(), uuid4()
     try:
         async with engine.begin() as connection:
@@ -105,15 +107,34 @@ async def _exercise_concurrent_accept(database_url: str) -> None:
                     "category_id": category_id,
                 },
             )
+            for index, command_product_id in enumerate(command_product_ids, start=1):
+                await connection.execute(
+                    text(
+                        "INSERT INTO products "
+                        "(id, seller_id, campus_id, category_id, title, description, price, "
+                        "status, published_at) VALUES "
+                        "(:id, :seller_id, :campus_id, :category_id, :title, "
+                        "'验证跨订单动作幂等键并发冲突', 38.00, 'on_sale', now())"
+                    ),
+                    {
+                        "id": command_product_id,
+                        "seller_id": seller_id,
+                        "campus_id": campus_id,
+                        "category_id": category_id,
+                        "title": f"动作幂等测试商品 {index}",
+                    },
+                )
 
         factory = async_sessionmaker(engine, expire_on_commit=False)
 
-        async def create_order(buyer_id: UUID, key: str) -> OrderResponse:
+        async def create_order(
+            buyer_id: UUID, key: str, selected_product_id: UUID = product_id
+        ) -> OrderResponse:
             async with factory.begin() as session:
                 return await OrderService(SqlAlchemyOrderRepository(session)).create(
                     user_id=buyer_id,
                     campus_status=CampusVerificationStatus.VERIFIED,
-                    payload=OrderCreate(product_id=product_id, idempotency_key=key),
+                    payload=OrderCreate(product_id=selected_product_id, idempotency_key=key),
                 )
 
         first = await create_order(first_buyer_id, "concurrent_create_1")
@@ -122,6 +143,9 @@ async def _exercise_concurrent_accept(database_url: str) -> None:
         assert repeated.id == first.id
         assert first.amount == second.amount
         assert first.product_title == "并发预留商品"
+        with pytest.raises(AppError) as duplicate_open:
+            await create_order(first_buyer_id, "concurrent_create_new_key")
+        assert duplicate_open.value.code == "order_already_exists"
 
         async def accept(order_id: UUID, action_id: str) -> str:
             try:
@@ -145,6 +169,67 @@ async def _exercise_concurrent_accept(database_url: str) -> None:
         )
         assert outcomes.count(OrderStatus.ACCEPTED.value) == 1
         assert outcomes.count("invalid_order_state") == 1
+        repeated_after_state_change = await create_order(first_buyer_id, "concurrent_create_1")
+        assert repeated_after_state_change.id == first.id
+
+        command_orders = await asyncio.gather(
+            create_order(
+                first_buyer_id,
+                "command_conflict_create_1",
+                command_product_ids[0],
+            ),
+            create_order(
+                second_buyer_id,
+                "command_conflict_create_2",
+                command_product_ids[1],
+            ),
+        )
+        command_outcomes = await asyncio.wait_for(
+            asyncio.gather(
+                accept(command_orders[0].id, "shared_concurrent_action"),
+                accept(command_orders[1].id, "shared_concurrent_action"),
+            ),
+            timeout=10,
+        )
+        assert command_outcomes.count(OrderStatus.ACCEPTED.value) == 1
+        assert command_outcomes.count("order_action_idempotency_conflict") == 1
+        now = datetime.now(UTC)
+        async with factory.begin() as session:
+            await session.execute(
+                update(Order)
+                .where(
+                    Order.seller_id == seller_id,
+                    Order.id.not_in([order.id for order in command_orders]),
+                )
+                .values(updated_at=now - timedelta(hours=2))
+            )
+            await session.execute(
+                update(Order).where(Order.id == command_orders[0].id).values(updated_at=now)
+            )
+            await session.execute(
+                update(Order)
+                .where(Order.id == command_orders[1].id)
+                .values(updated_at=now - timedelta(hours=1))
+            )
+        async with factory() as session:
+            order_service = OrderService(SqlAlchemyOrderRepository(session))
+            first_page = await order_service.list_orders(
+                user_id=seller_id,
+                role="selling",
+                status=None,
+                cursor=None,
+                limit=1,
+            )
+            assert [item.id for item in first_page.items] == [command_orders[0].id]
+            assert first_page.next_cursor is not None
+            second_page = await order_service.list_orders(
+                user_id=seller_id,
+                role="selling",
+                status=None,
+                cursor=first_page.next_cursor,
+                limit=1,
+            )
+            assert [item.id for item in second_page.items] == [command_orders[1].id]
 
         async with factory() as session:
             product = await session.get(Product, product_id)

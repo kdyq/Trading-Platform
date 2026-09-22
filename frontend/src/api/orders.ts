@@ -23,6 +23,7 @@ export interface OrderSummary {
   image_url: string | null
   scheduled_for: string | null
   created_at: string
+  updated_at: string
 }
 
 export interface MeetingProposal {

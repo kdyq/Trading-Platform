@@ -54,6 +54,10 @@ class OrderService:
         payload: OrderCreate,
     ) -> OrderResponse:
         self._require_verified(campus_status)
+        existing = await self.repository.find_order_by_idempotency(user_id, payload.idempotency_key)
+        if existing is not None:
+            self._require_same_create(existing, payload)
+            return self._response(existing)
         product = await self.repository.lock_product(payload.product_id)
         if product is None or product.status != ProductStatus.ON_SALE:
             raise AppError(
@@ -112,6 +116,12 @@ class OrderService:
         )
         order, created = await self.repository.create_order(proposed)
         if not created:
+            if order.idempotency_key != payload.idempotency_key:
+                raise AppError(
+                    status_code=409,
+                    code="order_already_exists",
+                    message="你已对该商品发起未完成订单",
+                )
             if order.product_id != product.id or order.conversation_id != payload.conversation_id:
                 raise AppError(
                     status_code=409,
@@ -152,7 +162,7 @@ class OrderService:
         if order is None or order.seller_id != user_id:
             raise AppError(status_code=404, code="order_not_found", message="订单不存在")
         payload_hash = self._payload_hash("accept", {})
-        existing = await self.repository.find_command(user_id, client_action_id)
+        existing = await self._find_command(user_id, client_action_id)
         if existing is not None:
             self._require_same_command(existing, order.id, "accept", payload_hash)
             return self._response(order)
@@ -225,7 +235,7 @@ class OrderService:
                 "location_text": payload.location_text,
             },
         )
-        existing = await self.repository.find_command(user_id, payload.client_action_id)
+        existing = await self._find_command(user_id, payload.client_action_id)
         if existing is not None:
             self._require_same_command(existing, order.id, "propose_meeting", payload_hash)
             proposal = (
@@ -309,7 +319,7 @@ class OrderService:
         self._require_participant(order, user_id)
         assert order is not None
         payload_hash = self._payload_hash("confirm_meeting", {"proposal_id": str(proposal_id)})
-        existing = await self.repository.find_command(user_id, client_action_id)
+        existing = await self._find_command(user_id, client_action_id)
         if existing is not None:
             self._require_same_command(existing, order.id, "confirm_meeting", payload_hash)
             proposal = await self.repository.get_meeting_proposal(proposal_id)
@@ -409,7 +419,7 @@ class OrderService:
         payload_hash = self._payload_hash(
             "cancel", {"reason_code": payload.reason_code, "note": payload.note}
         )
-        existing = await self.repository.find_command(user_id, payload.client_action_id)
+        existing = await self._find_command(user_id, payload.client_action_id)
         if existing is not None:
             self._require_same_command(existing, order.id, "cancel", payload_hash)
             return self._response(order)
@@ -491,7 +501,7 @@ class OrderService:
         if order is None or order.seller_id != user_id:
             raise AppError(status_code=404, code="order_not_found", message="订单不存在")
         payload_hash = self._payload_hash("mark_delivered", {})
-        existing = await self.repository.find_command(user_id, client_action_id)
+        existing = await self._find_command(user_id, client_action_id)
         if existing is not None:
             self._require_same_command(existing, order.id, "mark_delivered", payload_hash)
             return self._response(order)
@@ -544,7 +554,7 @@ class OrderService:
         if order is None or order.buyer_id != user_id:
             raise AppError(status_code=404, code="order_not_found", message="订单不存在")
         payload_hash = self._payload_hash("complete", {})
-        existing = await self.repository.find_command(user_id, client_action_id)
+        existing = await self._find_command(user_id, client_action_id)
         if existing is not None:
             self._require_same_command(existing, order.id, "complete", payload_hash)
             return self._response(order)
@@ -601,7 +611,7 @@ class OrderService:
         payload_hash = self._payload_hash(
             "dispute", {"reason_code": payload.reason_code, "details": payload.details}
         )
-        existing = await self.repository.find_command(user_id, payload.client_action_id)
+        existing = await self._find_command(user_id, payload.client_action_id)
         if existing is not None:
             self._require_same_command(existing, order.id, "dispute", payload_hash)
             return self._response(order)
@@ -665,13 +675,13 @@ class OrderService:
         cursor: str | None,
         limit: int,
     ) -> OrderListResponse:
-        before_created_at, before_id = self._decode_cursor(cursor) if cursor else (None, None)
+        before_updated_at, before_id = self._decode_cursor(cursor) if cursor else (None, None)
         records = list(
             await self.repository.list_orders(
                 user_id=user_id,
                 role=role,
                 status=status,
-                before_created_at=before_created_at,
+                before_updated_at=before_updated_at,
                 before_id=before_id,
                 limit=limit + 1,
             )
@@ -700,6 +710,7 @@ class OrderService:
                 ),
                 scheduled_for=order.scheduled_for,
                 created_at=order.created_at,
+                updated_at=order.updated_at,
             )
             for order, image_id in page
         ]
@@ -814,7 +825,7 @@ class OrderService:
 
     @staticmethod
     def _encode_cursor(order: Order) -> str:
-        value = json.dumps({"created_at": order.created_at.isoformat(), "id": str(order.id)})
+        value = json.dumps({"updated_at": order.updated_at.isoformat(), "id": str(order.id)})
         return base64.urlsafe_b64encode(value.encode()).decode().rstrip("=")
 
     @staticmethod
@@ -824,7 +835,7 @@ class OrderService:
             data = json.loads(base64.urlsafe_b64decode(padded).decode())
             if not isinstance(data, dict):
                 raise ValueError
-            return datetime.fromisoformat(data["created_at"]), UUID(data["id"])
+            return datetime.fromisoformat(data["updated_at"]), UUID(data["id"])
         except (binascii.Error, KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
             raise AppError(status_code=422, code="invalid_cursor", message="分页游标无效") from exc
 
@@ -846,6 +857,22 @@ class OrderService:
     def _require_participant(order: Order | None, user_id: UUID) -> None:
         if order is None or user_id not in (order.buyer_id, order.seller_id):
             raise AppError(status_code=404, code="order_not_found", message="订单不存在")
+
+    async def _find_command(self, actor_id: UUID, client_action_id: str) -> OrderCommand | None:
+        await self.repository.lock_command_key(actor_id, client_action_id)
+        return await self.repository.find_command(actor_id, client_action_id)
+
+    @staticmethod
+    def _require_same_create(order: Order, payload: OrderCreate) -> None:
+        if (
+            order.product_id != payload.product_id
+            or order.conversation_id != payload.conversation_id
+        ):
+            raise AppError(
+                status_code=409,
+                code="order_idempotency_conflict",
+                message="订单幂等键已用于其他请求",
+            )
 
     @staticmethod
     def _other_party(order: Order, user_id: UUID) -> UUID:

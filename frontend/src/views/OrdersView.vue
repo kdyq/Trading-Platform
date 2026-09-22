@@ -162,6 +162,10 @@ onMounted(() => load())
               <dt>付款方式</dt>
               <dd>线下当面支付</dd>
             </div>
+            <div>
+              <dt>最近更新</dt>
+              <dd>{{ formatDate(order.updated_at) }}</dd>
+            </div>
           </dl>
           <span class="order-detail-link">查看订单详情</span>
         </div>
