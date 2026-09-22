@@ -37,6 +37,8 @@ class OrderStatus(StrEnum):
 class CreditEventType(StrEnum):
     ORDER_COMPLETED = "order_completed"
     REVIEW_RECEIVED = "review_received"
+    REPORT_VIOLATION = "report_violation"
+    PENALTY_REVERSAL = "penalty_reversal"
     MODERATION_ADJUSTMENT = "moderation_adjustment"
 
 
@@ -238,6 +240,12 @@ class CreditLedger(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         )
     )
     reference_id: Mapped[UUID]
+    source_type: Mapped[str] = mapped_column(String(48))
+    rule_version: Mapped[str] = mapped_column(String(24), default="v1", server_default="v1")
     delta: Mapped[int]
     balance_after: Mapped[int]
     reason: Mapped[str] = mapped_column(String(255))
+    actor_id: Mapped[UUID | None] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"))
+    reversal_of_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("credit_ledgers.id", ondelete="RESTRICT")
+    )

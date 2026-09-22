@@ -11,6 +11,7 @@ from app.db.session import get_database_session
 from app.repositories.campus import CampusRepository, SqlAlchemyCampusRepository
 from app.repositories.catalog import CatalogRepository, SqlAlchemyCatalogRepository
 from app.repositories.chat import ChatRepository, SqlAlchemyChatRepository
+from app.repositories.credit import SqlAlchemyCreditRepository
 from app.repositories.identity import (
     AccountRepository,
     IdentityRepository,
@@ -31,6 +32,7 @@ from app.services.auth import AuthService
 from app.services.campus import CampusService
 from app.services.catalog import CatalogCache, CatalogService
 from app.services.chat import ChatService
+from app.services.credit import CreditService
 from app.services.email_verification import (
     RedisVerificationCodeStore,
     UnavailableVerificationCodeStore,
@@ -255,8 +257,15 @@ def get_market_service(
 
 def get_order_service(
     repository: Annotated[OrderRepository, Depends(get_order_repository)],
+    session: Annotated[AsyncSession, Depends(get_database_session)],
 ) -> OrderService:
-    return OrderService(repository)
+    return OrderService(repository, SqlAlchemyCreditRepository(session))
+
+
+def get_credit_service(
+    session: Annotated[AsyncSession, Depends(get_database_session)],
+) -> CreditService:
+    return CreditService(SqlAlchemyCreditRepository(session))
 
 
 def get_catalog_service(

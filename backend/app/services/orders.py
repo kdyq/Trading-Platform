@@ -10,6 +10,7 @@ from app.models.catalog import ProductStatus
 from app.models.identity import CampusVerificationStatus
 from app.models.moderation import ModerationTargetType, Report, ReportStatus
 from app.models.trade import (
+    CreditEventType,
     MeetingProposalStatus,
     Order,
     OrderCommand,
@@ -17,6 +18,7 @@ from app.models.trade import (
     OrderStatus,
     Review,
 )
+from app.repositories.credit import SqlAlchemyCreditRepository
 from app.repositories.orders import OrderRepository
 from app.schemas.orders import (
     MeetingProposalCreate,
@@ -43,8 +45,13 @@ class OrderService:
         "smooth_transaction",
     }
 
-    def __init__(self, repository: OrderRepository) -> None:
+    def __init__(
+        self,
+        repository: OrderRepository,
+        credit_repository: SqlAlchemyCreditRepository | None = None,
+    ) -> None:
         self.repository = repository
+        self.credit_repository = credit_repository
 
     async def create(
         self,
@@ -593,6 +600,16 @@ class OrderService:
             summary="买家已确认收货，本次校内面交已完成。",
             order_id=order.id,
         )
+        if self.credit_repository is not None:
+            for participant_id in (order.buyer_id, order.seller_id):
+                await self.credit_repository.append(
+                    user_id=participant_id,
+                    event_type=CreditEventType.ORDER_COMPLETED,
+                    source_type="order",
+                    reference_id=order.id,
+                    delta=2,
+                    reason="完成校内交易",
+                )
         await self.repository.refresh_order(order)
         return self._response(order)
 
@@ -795,6 +812,16 @@ class OrderService:
             is_visible=True,
         )
         self.repository.add_review(review)
+        review_delta = 1 if payload.rating >= 4 else (-1 if payload.rating <= 2 else 0)
+        if self.credit_repository is not None and review_delta:
+            await self.credit_repository.append(
+                user_id=review.reviewee_id,
+                event_type=CreditEventType.REVIEW_RECEIVED,
+                source_type="review",
+                reference_id=review.id,
+                delta=review_delta,
+                reason="收到有效交易评价",
+            )
         await self.repository.create_notification(
             recipient_id=review.reviewee_id,
             event_key=f"order.reviewed:{order.id}:{user_id}",
