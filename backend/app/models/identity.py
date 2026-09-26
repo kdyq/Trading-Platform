@@ -153,6 +153,9 @@ class User(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, VersionMixin, B
     privacy_policy_version: Mapped[str] = mapped_column(String(64))
     terms_agreed_at: Mapped[datetime]
     avatar_key: Mapped[str | None] = mapped_column(String(255))
+    suspension_source_report_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("reports.id", ondelete="RESTRICT")
+    )
 
     roles: Mapped[list["Role"]] = relationship(secondary=user_roles, back_populates="users")
     campus_verifications: Mapped[list["CampusVerification"]] = relationship(back_populates="user")

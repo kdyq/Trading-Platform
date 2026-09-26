@@ -1,3 +1,4 @@
 dist
 coverage
+.mypy_cache
 pnpm-lock.yaml

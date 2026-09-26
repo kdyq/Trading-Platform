@@ -1,4 +1,5 @@
-import { requestJson } from './client'
+import { requestBlob, requestJson } from './client'
+import type { ReportEvidence } from './reports'
 
 export interface ModerationProduct {
   id: string
@@ -16,11 +17,19 @@ export interface ModerationProduct {
   updated_at: string
 }
 
-export async function listModerationProducts(accessToken: string, status = 'pending_review') {
-  return requestJson<{ items: ModerationProduct[] }>(
-    `/api/v1/moderation/products?status=${encodeURIComponent(status)}`,
-    { accessToken },
-  )
+export async function listModerationProducts(
+  accessToken: string,
+  status = 'pending_review',
+  page = 1,
+) {
+  return requestJson<{
+    items: ModerationProduct[]
+    page: number
+    page_size: number
+    total: number
+  }>(`/api/v1/moderation/products?status=${encodeURIComponent(status)}&page=${page}`, {
+    accessToken,
+  })
 }
 
 export async function decideModerationProduct(
@@ -59,10 +68,13 @@ export interface ModerationReport {
   updated_at: string
 }
 
-export async function listModerationReports(accessToken: string) {
-  return requestJson<{ items: ModerationReport[] }>('/api/v1/moderation/reports', {
-    accessToken,
-  })
+export async function listModerationReports(accessToken: string, page = 1) {
+  return requestJson<{ items: ModerationReport[]; page: number; page_size: number; total: number }>(
+    `/api/v1/moderation/reports?page=${page}`,
+    {
+      accessToken,
+    },
+  )
 }
 
 export async function decideModerationReport(
@@ -94,8 +106,24 @@ export interface ReportAppeal {
   status: string
   details: string
   review_reason: string | null
+  evidence_ids: string[]
   created_at: string
   updated_at: string
+}
+
+export async function uploadAppealEvidence(accessToken: string, appealId: string, evidence: File) {
+  const form = new FormData()
+  form.append('evidence', evidence)
+  return requestJson<ReportEvidence>(`/api/v1/moderation/appeals/${appealId}/evidence`, {
+    method: 'POST',
+    accessToken,
+    body: form,
+    acceptedStatuses: [201],
+  })
+}
+
+export function downloadAppealEvidence(accessToken: string, appealId: string, evidenceId: string) {
+  return requestBlob(`/api/v1/moderation/appeals/${appealId}/evidence/${evidenceId}`, accessToken)
 }
 
 export async function createReportAppeal(accessToken: string, reportId: string, details: string) {
@@ -107,8 +135,11 @@ export async function createReportAppeal(accessToken: string, reportId: string, 
   })
 }
 
-export async function listReportAppeals(accessToken: string) {
-  return requestJson<{ items: ReportAppeal[] }>('/api/v1/moderation/appeals', { accessToken })
+export async function listReportAppeals(accessToken: string, page = 1) {
+  return requestJson<{ items: ReportAppeal[]; page: number; page_size: number; total: number }>(
+    `/api/v1/moderation/appeals?page=${page}`,
+    { accessToken },
+  )
 }
 
 export async function reviewReportAppeal(

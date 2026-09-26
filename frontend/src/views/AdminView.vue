@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { onMounted, onUnmounted, ref } from 'vue'
 
-import { ApiError } from '../api/client'
+import { ApiError, requestBlob } from '../api/client'
 import {
+  downloadAppealEvidence,
   decideModerationProduct,
   decideModerationReport,
   listModerationProducts,
@@ -17,6 +18,12 @@ const auth = useAuthStore()
 const products = ref<ModerationProduct[]>([])
 const reports = ref<ModerationReport[]>([])
 const appeals = ref<ReportAppeal[]>([])
+const productPage = ref(1)
+const reportPage = ref(1)
+const appealPage = ref(1)
+const productTotal = ref(0)
+const reportTotal = ref(0)
+const appealTotal = ref(0)
 const status = ref('pending_review')
 const loading = ref(true)
 const error = ref('')
@@ -27,6 +34,12 @@ const reportPublicNotes = ref<Record<string, string>>({})
 const reportInternalNotes = ref<Record<string, string>>({})
 const reportPenalties = ref<Record<string, 'none' | 'warn' | 'hide' | 'suspend'>>({})
 const appealNotes = ref<Record<string, string>>({})
+const productImageBlobs = ref<Record<string, string>>({})
+
+function clearProductImageBlobs() {
+  for (const url of Object.values(productImageBlobs.value)) URL.revokeObjectURL(url)
+  productImageBlobs.value = {}
+}
 
 async function load() {
   if (!auth.accessToken) {
@@ -38,17 +51,59 @@ async function load() {
   error.value = ''
   try {
     const [productResult, reportResult, appealResult] = await Promise.all([
-      listModerationProducts(auth.accessToken, status.value),
-      listModerationReports(auth.accessToken),
-      listReportAppeals(auth.accessToken),
+      listModerationProducts(auth.accessToken, status.value, productPage.value),
+      listModerationReports(auth.accessToken, reportPage.value),
+      listReportAppeals(auth.accessToken, appealPage.value),
     ])
     products.value = productResult.items
+    productTotal.value = productResult.total
+    clearProductImageBlobs()
+    await Promise.all(
+      productResult.items.map(async (product) => {
+        if (!product.image_urls[0] || !auth.accessToken) return
+        try {
+          const blob = await requestBlob(product.image_urls[0], auth.accessToken)
+          productImageBlobs.value[product.id] = URL.createObjectURL(blob)
+        } catch {
+          // The moderation card remains usable if an image file is unavailable.
+        }
+      }),
+    )
     reports.value = reportResult.items
+    reportTotal.value = reportResult.total
     appeals.value = appealResult.items
+    appealTotal.value = appealResult.total
   } catch (caught) {
     error.value = caught instanceof Error ? caught.message : '审核队列加载失败'
   } finally {
     loading.value = false
+  }
+}
+
+function changePage(queue: 'product' | 'report' | 'appeal', delta: number) {
+  if (queue === 'product') productPage.value = Math.max(1, productPage.value + delta)
+  else if (queue === 'report') reportPage.value = Math.max(1, reportPage.value + delta)
+  else appealPage.value = Math.max(1, appealPage.value + delta)
+  void load()
+}
+
+function changeProductStatus() {
+  productPage.value = 1
+  void load()
+}
+
+async function saveAppealEvidence(appeal: ReportAppeal, evidenceId: string) {
+  if (!auth.accessToken) return
+  try {
+    const blob = await downloadAppealEvidence(auth.accessToken, appeal.id, evidenceId)
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `appeal-evidence-${evidenceId}`
+    link.click()
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+  } catch (caught) {
+    error.value = caught instanceof Error ? caught.message : '复核材料下载失败'
   }
 }
 
@@ -125,6 +180,7 @@ async function decide(
 }
 
 onMounted(load)
+onUnmounted(clearProductImageBlobs)
 </script>
 
 <template>
@@ -137,7 +193,7 @@ onMounted(load)
       </div>
       <label>
         <span>队列</span>
-        <select v-model="status" @change="load">
+        <select v-model="status" @change="changeProductStatus">
           <option value="pending_review">待审核</option>
           <option value="on_sale">在售</option>
           <option value="hidden">已隐藏</option>
@@ -149,7 +205,11 @@ onMounted(load)
     <p v-else-if="!products.length && !error">当前队列为空。</p>
     <div class="moderation-grid">
       <article v-for="product in products" :key="product.id" class="moderation-card">
-        <img v-if="product.image_urls[0]" :src="product.image_urls[0]" :alt="product.title" />
+        <img
+          v-if="productImageBlobs[product.id]"
+          :src="productImageBlobs[product.id]"
+          :alt="product.title"
+        />
         <div class="moderation-card-body">
           <div class="moderation-card-title">
             <h2>{{ product.title }}</h2>
@@ -189,7 +249,7 @@ onMounted(load)
               驳回
             </button>
             <button
-              v-if="['on_sale', 'reserved', 'sold'].includes(product.status)"
+              v-if="product.status === 'on_sale'"
               class="secondary"
               type="button"
               :disabled="busyId === product.id"
@@ -209,6 +269,19 @@ onMounted(load)
         </div>
       </article>
     </div>
+    <nav class="moderation-actions" aria-label="商品审核分页">
+      <button type="button" :disabled="productPage <= 1" @click="changePage('product', -1)">
+        上一页
+      </button>
+      <span>第 {{ productPage }} 页 · 共 {{ productTotal }} 件</span>
+      <button
+        type="button"
+        :disabled="productPage * 20 >= productTotal"
+        @click="changePage('product', 1)"
+      >
+        下一页
+      </button>
+    </nav>
     <p v-if="error" class="moderation-error" role="alert">{{ error }}</p>
     <section class="report-queue">
       <header>
@@ -246,6 +319,19 @@ onMounted(load)
           <button type="button" @click="decideReport(report, 'violate')">确认违规</button>
         </div>
       </article>
+      <nav class="moderation-actions" aria-label="举报分页">
+        <button type="button" :disabled="reportPage <= 1" @click="changePage('report', -1)">
+          上一页
+        </button>
+        <span>第 {{ reportPage }} 页 · 共 {{ reportTotal }} 件</span>
+        <button
+          type="button"
+          :disabled="reportPage * 20 >= reportTotal"
+          @click="changePage('report', 1)"
+        >
+          下一页
+        </button>
+      </nav>
     </section>
     <section class="report-queue">
       <header>
@@ -254,7 +340,18 @@ onMounted(load)
       </header>
       <article v-for="appeal in appeals" :key="appeal.id" class="report-review-card">
         <strong>举报 {{ appeal.report_id }}</strong>
+        <small>{{ appeal.status }}</small>
         <p>{{ appeal.details }}</p>
+        <div v-if="appeal.evidence_ids.length" class="moderation-actions">
+          <button
+            v-for="evidenceId in appeal.evidence_ids"
+            :key="evidenceId"
+            type="button"
+            @click="saveAppealEvidence(appeal, evidenceId)"
+          >
+            下载复核材料
+          </button>
+        </div>
         <label>
           <span>复核理由</span>
           <textarea v-model="appealNotes[appeal.id]" rows="3" maxlength="1000" />
@@ -266,6 +363,19 @@ onMounted(load)
           <button type="button" @click="reviewAppeal(appeal, 'reverse')">撤销处罚</button>
         </div>
       </article>
+      <nav class="moderation-actions" aria-label="申诉分页">
+        <button type="button" :disabled="appealPage <= 1" @click="changePage('appeal', -1)">
+          上一页
+        </button>
+        <span>第 {{ appealPage }} 页 · 共 {{ appealTotal }} 件</span>
+        <button
+          type="button"
+          :disabled="appealPage * 20 >= appealTotal"
+          @click="changePage('appeal', 1)"
+        >
+          下一页
+        </button>
+      </nav>
     </section>
   </section>
 </template>

@@ -203,12 +203,14 @@ async def _exercise_chat_repository(database_url: str) -> None:
 
             report = await repository.report_message(
                 reporter_id=buyer_id,
+                subject_user_id=seller_id,
                 message_id=latest_message.id,
                 reason_code="spam",
                 details="重复发送无关信息",
             )
             repeated_report = await repository.report_message(
                 reporter_id=buyer_id,
+                subject_user_id=seller_id,
                 message_id=latest_message.id,
                 reason_code="spam",
                 details="不会覆盖已有证据",

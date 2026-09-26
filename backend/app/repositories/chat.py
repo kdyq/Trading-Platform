@@ -5,7 +5,7 @@ from decimal import Decimal
 from typing import Any, Protocol, cast
 from uuid import UUID, uuid4
 
-from sqlalchemy import case, delete, func, or_, select, update
+from sqlalchemy import case, delete, func, or_, select, text, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
@@ -19,7 +19,13 @@ from app.models.messaging import (
     MessageRiskSignal,
     UserBlock,
 )
-from app.models.moderation import AuditLog, ModerationTargetType, Report
+from app.models.moderation import (
+    AuditLog,
+    ModerationTargetType,
+    Report,
+    ReportEvent,
+    ReportStatus,
+)
 from app.models.notification import (
     Notification,
     NotificationDeliveryAttempt,
@@ -122,7 +128,13 @@ class ChatRepository(Protocol):
     ) -> Notification | None: ...
 
     async def report_message(
-        self, *, reporter_id: UUID, message_id: UUID, reason_code: str, details: str | None
+        self,
+        *,
+        reporter_id: UUID,
+        subject_user_id: UUID,
+        message_id: UUID,
+        reason_code: str,
+        details: str | None,
     ) -> Report: ...
 
     async def list_notifications(self, user_id: UUID, limit: int) -> Sequence[Notification]: ...
@@ -535,7 +547,13 @@ class SqlAlchemyChatRepository:
         return notification
 
     async def report_message(
-        self, *, reporter_id: UUID, message_id: UUID, reason_code: str, details: str | None
+        self,
+        *,
+        reporter_id: UUID,
+        subject_user_id: UUID,
+        message_id: UUID,
+        reason_code: str,
+        details: str | None,
     ) -> Report:
         report_id = uuid4()
         inserted_id = await self.session.scalar(
@@ -547,20 +565,44 @@ class SqlAlchemyChatRepository:
                 target_id=message_id,
                 reason_code=reason_code,
                 details=details,
+                subject_user_id=subject_user_id,
+                status=ReportStatus.OPEN,
             )
-            .on_conflict_do_nothing(constraint="uq_reports_key")
+            .on_conflict_do_nothing(
+                index_elements=[
+                    Report.reporter_id,
+                    Report.target_type,
+                    Report.target_id,
+                    Report.reason_code,
+                ],
+                index_where=text("status IN ('open', 'reviewing')"),
+            )
             .returning(Report.id)
         )
         report = await self.session.scalar(
-            select(Report).where(
+            select(Report)
+            .where(
                 Report.reporter_id == reporter_id,
                 Report.target_type == ModerationTargetType.MESSAGE,
                 Report.target_id == message_id,
                 Report.reason_code == reason_code,
+                Report.status.in_((ReportStatus.OPEN, ReportStatus.REVIEWING)),
             )
+            .order_by(Report.created_at.desc(), Report.id.desc())
         )
         assert report is not None
         if inserted_id is not None:
+            self.session.add(
+                ReportEvent(
+                    id=uuid4(),
+                    report_id=report.id,
+                    actor_id=reporter_id,
+                    from_status=None,
+                    to_status=ReportStatus.OPEN,
+                    public_note="举报已提交",
+                    event_data={},
+                )
+            )
             self.session.add(
                 AuditLog(
                     id=uuid4(),

@@ -52,6 +52,7 @@ class ReportService:
             raise AppError(
                 status_code=404, code="report_target_not_found", message="举报对象不存在"
             )
+        await self.repository.lock_reporter(reporter_id)
         if await self.repository.recent_count(reporter_id) >= self.hourly_limit:
             existing = await self.repository.find_key(
                 reporter_id=reporter_id,

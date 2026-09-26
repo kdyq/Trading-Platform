@@ -15,7 +15,7 @@ from app.models.identity import (
     User,
 )
 from app.models.messaging import Conversation
-from app.models.moderation import Report
+from app.models.moderation import Report, ReportEvent
 from app.models.notification import (
     Notification,
     NotificationDeliveryAttempt,
@@ -70,6 +70,8 @@ class OrderRepository(Protocol):
     async def claim_expired_pending(self, limit: int) -> Sequence[Order]: ...
 
     def add_dispute_report(self, report: Report) -> None: ...
+
+    def add_dispute_report_event(self, event: ReportEvent) -> None: ...
 
     async def list_orders(
         self,
@@ -311,6 +313,9 @@ class SqlAlchemyOrderRepository:
 
     def add_dispute_report(self, report: Report) -> None:
         self.session.add(report)
+
+    def add_dispute_report_event(self, event: ReportEvent) -> None:
+        self.session.add(event)
 
     async def list_orders(
         self,

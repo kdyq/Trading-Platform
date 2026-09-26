@@ -17,6 +17,7 @@ from app.models.moderation import (
     ModerationTargetType,
     Report,
     ReportAppeal,
+    ReportAppealEvidence,
     ReportEvidence,
     ReportStatus,
 )
@@ -43,15 +44,27 @@ class SqlAlchemyModerationRepository:
         )
         return bool(count)
 
-    async def list_products(self, status: ProductStatus) -> Sequence[tuple[Product, str]]:
+    async def list_products(
+        self, status: ProductStatus, *, page: int, page_size: int
+    ) -> tuple[Sequence[tuple[Product, str]], int]:
+        total = int(
+            await self.session.scalar(
+                select(func.count())
+                .select_from(Product)
+                .where(Product.status == status, Product.deleted_at.is_(None))
+            )
+            or 0
+        )
         rows = await self.session.execute(
             select(Product, User.display_name)
             .join(User, User.id == Product.seller_id)
             .where(Product.status == status, Product.deleted_at.is_(None))
             .options(selectinload(Product.images))
             .order_by(Product.updated_at, Product.id)
+            .offset((page - 1) * page_size)
+            .limit(page_size)
         )
-        return [(row[0], row[1]) for row in rows]
+        return [(row[0], row[1]) for row in rows], total
 
     async def get_product(self, product_id: UUID, *, lock: bool = False) -> Product | None:
         query = (
@@ -146,11 +159,23 @@ class SqlAlchemyModerationRepository:
                 )
             )
 
-    async def list_reports(self, status: ReportStatus | None) -> Sequence[Report]:
+    async def list_reports(
+        self, status: ReportStatus | None, *, page: int, page_size: int
+    ) -> tuple[Sequence[Report], int]:
         query = select(Report)
+        count_query = select(func.count()).select_from(Report)
         if status is not None:
             query = query.where(Report.status == status)
-        return list(await self.session.scalars(query.order_by(Report.created_at, Report.id)))
+            count_query = count_query.where(Report.status == status)
+        total = int(await self.session.scalar(count_query) or 0)
+        items = list(
+            await self.session.scalars(
+                query.order_by(Report.created_at.desc(), Report.id.desc())
+                .offset((page - 1) * page_size)
+                .limit(page_size)
+            )
+        )
+        return items, total
 
     async def get_report(self, report_id: UUID, *, lock: bool = False) -> Report | None:
         query = select(Report).where(Report.id == report_id)
@@ -170,43 +195,105 @@ class SqlAlchemyModerationRepository:
     async def get_report_evidence(self, evidence_id: UUID) -> ReportEvidence | None:
         return cast(ReportEvidence | None, await self.session.get(ReportEvidence, evidence_id))
 
-    async def suspend_user(self, user_id: UUID) -> None:
+    async def suspend_user(self, user_id: UUID, report_id: UUID) -> None:
         user = await self.session.get(User, user_id, with_for_update=True)
-        if user is not None:
+        if user is not None and user.status == UserStatus.ACTIVE:
             user.status = UserStatus.SUSPENDED
+            user.suspension_source_report_id = report_id
 
-    async def activate_user(self, user_id: UUID) -> None:
+    async def activate_user(self, user_id: UUID, report_id: UUID) -> None:
         user = await self.session.get(User, user_id, with_for_update=True)
-        if user is not None and user.status == UserStatus.SUSPENDED:
+        if (
+            user is not None
+            and user.status == UserStatus.SUSPENDED
+            and user.suspension_source_report_id == report_id
+        ):
             user.status = UserStatus.ACTIVE
+            user.suspension_source_report_id = None
+
+    async def set_user_suspension_source(
+        self, user_id: UUID, from_report_id: UUID, report_id: UUID
+    ) -> None:
+        user = await self.session.get(User, user_id, with_for_update=True)
+        if (
+            user is not None
+            and user.status == UserStatus.SUSPENDED
+            and user.suspension_source_report_id == from_report_id
+        ):
+            user.suspension_source_report_id = report_id
 
     async def hide_report_product(self, report: Report) -> None:
         if report.target_type != ModerationTargetType.PRODUCT:
             return
         product = await self.get_product(report.target_id, lock=True)
-        if product is None or product.status == ProductStatus.HIDDEN:
+        if product is None:
+            return
+        if product.status == ProductStatus.HIDDEN or product.status != ProductStatus.ON_SALE:
             return
         product.hidden_from_status = product.status.value
         product.status = ProductStatus.HIDDEN
         product.moderation_reason_code = "report_violation"
         product.moderation_public_note = report.public_result
+        product.moderation_source_report_id = report.id
 
     async def restore_report_product(self, report: Report) -> None:
         if report.target_type != ModerationTargetType.PRODUCT:
             return
         product = await self.get_product(report.target_id, lock=True)
-        if product is None or product.status != ProductStatus.HIDDEN:
+        if (
+            product is None
+            or product.status != ProductStatus.HIDDEN
+            or product.moderation_source_report_id != report.id
+        ):
             return
         try:
             restored = ProductStatus(product.hidden_from_status or "")
         except ValueError:
             restored = ProductStatus.PENDING_REVIEW
-        if restored not in {ProductStatus.ON_SALE, ProductStatus.RESERVED, ProductStatus.SOLD}:
+        if restored != ProductStatus.ON_SALE:
             restored = ProductStatus.PENDING_REVIEW
         product.status = restored
         product.hidden_from_status = None
+        product.moderation_source_report_id = None
         product.moderation_reason_code = "penalty_reversed"
         product.moderation_public_note = report.public_result
+
+    async def set_product_moderation_source(self, report: Report, report_id: UUID) -> None:
+        if report.target_type != ModerationTargetType.PRODUCT:
+            return
+        product = await self.get_product(report.target_id, lock=True)
+        if (
+            product is not None
+            and product.status == ProductStatus.HIDDEN
+            and product.moderation_source_report_id == report.id
+        ):
+            product.moderation_source_report_id = report_id
+
+    async def blocking_penalty_report_id(
+        self, report: Report, action: ModerationAction
+    ) -> UUID | None:
+        target_filter = (
+            Report.subject_user_id == report.subject_user_id
+            if action == ModerationAction.SUSPEND
+            else (ModerationRecord.target_type == report.target_type)
+            & (ModerationRecord.target_id == report.target_id)
+        )
+        return cast(
+            UUID | None,
+            await self.session.scalar(
+                select(ModerationRecord.report_id)
+                .join(Report, Report.id == ModerationRecord.report_id)
+                .where(
+                    ModerationRecord.report_id.is_not(None),
+                    ModerationRecord.report_id != report.id,
+                    target_filter,
+                    ModerationRecord.action == action,
+                    Report.status.in_((ReportStatus.RESOLVED, ReportStatus.APPEALED)),
+                )
+                .order_by(ModerationRecord.created_at.desc(), ModerationRecord.id.desc())
+                .limit(1)
+            ),
+        )
 
     def record_report_decision(
         self,
@@ -290,14 +377,76 @@ class SqlAlchemyModerationRepository:
             ),
         )
 
-    async def list_appeals(self, status: str = "pending") -> Sequence[ReportAppeal]:
+    async def add_appeal_evidence(
+        self,
+        *,
+        appeal_id: UUID,
+        uploader_id: UUID,
+        object_key: str,
+        original_filename: str,
+        media_type: str,
+        size_bytes: int,
+        sha256: str,
+    ) -> tuple[ReportAppealEvidence, bool]:
+        evidence_id = uuid4()
+        inserted = await self.session.scalar(
+            insert(ReportAppealEvidence)
+            .values(
+                id=evidence_id,
+                appeal_id=appeal_id,
+                uploader_id=uploader_id,
+                object_key=object_key,
+                original_filename=original_filename,
+                media_type=media_type,
+                size_bytes=size_bytes,
+                sha256=sha256,
+            )
+            .on_conflict_do_nothing(constraint="uq_appeal_evidence_content")
+            .returning(ReportAppealEvidence.id)
+        )
+        evidence = await self.session.scalar(
+            select(ReportAppealEvidence).where(
+                ReportAppealEvidence.appeal_id == appeal_id,
+                ReportAppealEvidence.sha256 == sha256,
+            )
+        )
+        assert evidence is not None
+        return evidence, inserted is not None
+
+    async def appeal_evidence_ids(self, appeal_id: UUID) -> list[UUID]:
         return list(
+            await self.session.scalars(
+                select(ReportAppealEvidence.id)
+                .where(ReportAppealEvidence.appeal_id == appeal_id)
+                .order_by(ReportAppealEvidence.created_at, ReportAppealEvidence.id)
+            )
+        )
+
+    async def get_appeal_evidence(self, evidence_id: UUID) -> ReportAppealEvidence | None:
+        return cast(
+            ReportAppealEvidence | None,
+            await self.session.get(ReportAppealEvidence, evidence_id),
+        )
+
+    async def list_appeals(
+        self, status: str = "pending", *, page: int, page_size: int
+    ) -> tuple[Sequence[ReportAppeal], int]:
+        total = int(
+            await self.session.scalar(
+                select(func.count()).select_from(ReportAppeal).where(ReportAppeal.status == status)
+            )
+            or 0
+        )
+        items = list(
             await self.session.scalars(
                 select(ReportAppeal)
                 .where(ReportAppeal.status == status)
-                .order_by(ReportAppeal.created_at, ReportAppeal.id)
+                .order_by(ReportAppeal.created_at.desc(), ReportAppeal.id.desc())
+                .offset((page - 1) * page_size)
+                .limit(page_size)
             )
         )
+        return items, total
 
     async def notify_report_user(
         self,

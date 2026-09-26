@@ -3,7 +3,7 @@ from datetime import UTC, datetime, timedelta
 from typing import cast
 from uuid import UUID, uuid4
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, or_, select, text
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -112,6 +112,12 @@ class SqlAlchemyReportRepository:
         )
         return int(count or 0)
 
+    async def lock_reporter(self, reporter_id: UUID) -> None:
+        await self.session.execute(
+            text("SELECT pg_advisory_xact_lock(hashtextextended(:report_key, 0))"),
+            {"report_key": f"report-rate:{reporter_id}"},
+        )
+
     async def create_or_get(
         self,
         *,
@@ -136,16 +142,27 @@ class SqlAlchemyReportRepository:
                 status=ReportStatus.OPEN,
                 version=1,
             )
-            .on_conflict_do_nothing(constraint="uq_reports_key")
+            .on_conflict_do_nothing(
+                index_elements=[
+                    Report.reporter_id,
+                    Report.target_type,
+                    Report.target_id,
+                    Report.reason_code,
+                ],
+                index_where=text("status IN ('open', 'reviewing')"),
+            )
             .returning(Report.id)
         )
         report = await self.session.scalar(
-            select(Report).where(
+            select(Report)
+            .where(
                 Report.reporter_id == reporter_id,
                 Report.target_type == target_type,
                 Report.target_id == target_id,
                 Report.reason_code == reason_code,
+                Report.status.in_((ReportStatus.OPEN, ReportStatus.REVIEWING)),
             )
+            .order_by(Report.created_at.desc(), Report.id.desc())
         )
         assert report is not None
         if inserted is not None:
@@ -169,12 +186,15 @@ class SqlAlchemyReportRepository:
         return cast(
             Report | None,
             await self.session.scalar(
-                select(Report).where(
+                select(Report)
+                .where(
                     Report.reporter_id == reporter_id,
                     Report.target_type == target_type,
                     Report.target_id == target_id,
                     Report.reason_code == reason_code,
+                    Report.status.in_((ReportStatus.OPEN, ReportStatus.REVIEWING)),
                 )
+                .order_by(Report.created_at.desc(), Report.id.desc())
             ),
         )
 

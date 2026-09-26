@@ -7,6 +7,7 @@ from uuid import UUID
 
 from sqlalchemy import (
     JSON,
+    BigInteger,
     Boolean,
     CheckConstraint,
     Enum,
@@ -225,8 +226,9 @@ class CreditLedger(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "credit_ledgers"
     __table_args__ = (
         UniqueConstraint("user_id", "event_type", "reference_id", name="uq_credit_ledgers_source"),
+        UniqueConstraint("user_id", "sequence_no", name="uq_credit_ledgers_user_sequence"),
         CheckConstraint("delta <> 0", name="delta_nonzero"),
-        Index("ix_credit_ledgers_user_created", "user_id", "created_at"),
+        Index("ix_credit_ledgers_user_created", "user_id", "sequence_no"),
     )
 
     user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"))
@@ -242,6 +244,7 @@ class CreditLedger(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     reference_id: Mapped[UUID]
     source_type: Mapped[str] = mapped_column(String(48))
     rule_version: Mapped[str] = mapped_column(String(24), default="v1", server_default="v1")
+    sequence_no: Mapped[int] = mapped_column(BigInteger)
     delta: Mapped[int]
     balance_after: Mapped[int]
     reason: Mapped[str] = mapped_column(String(255))

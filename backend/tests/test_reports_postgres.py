@@ -71,12 +71,27 @@ async def _exercise_reports(database_url: str) -> None:
             assert created is True
             assert repeated_created is False
             assert repeated.id == first.id
+            first.status = ReportStatus.WITHDRAWN
+            await session.flush()
+            renewed, renewed_created = await repository.create_or_get(
+                reporter_id=reporter_id,
+                target_type=ModerationTargetType.USER,
+                target_id=target_id,
+                reason_code="fraud",
+                details="撤回后出现的新事实",
+            )
+            assert renewed_created is True
+            assert renewed.id != first.id
 
         async with factory() as session:
-            assert await session.scalar(select(func.count(Report.id))) == 1
-            assert await session.scalar(select(func.count(ReportEvent.id))) == 1
-            event = await session.scalar(select(ReportEvent))
-            assert event is not None and event.to_status == ReportStatus.OPEN
+            assert await session.scalar(select(func.count(Report.id))) == 2
+            assert await session.scalar(select(func.count(ReportEvent.id))) == 2
+            assert (
+                await session.scalar(
+                    select(func.count(Report.id)).where(Report.status == ReportStatus.OPEN)
+                )
+                == 1
+            )
     finally:
         await engine.dispose()
         async with admin_engine.begin() as connection:

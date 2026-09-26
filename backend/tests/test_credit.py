@@ -48,6 +48,7 @@ class MemoryCreditRepository:
             source_type=source_type,
             reference_id=reference_id,
             rule_version=rule_version,
+            sequence_no=len([item for item in self.ledgers if item.user_id == user_id]) + 1,
             delta=delta,
             balance_after=balance + delta,
             reason=reason,
@@ -64,15 +65,18 @@ class MemoryCreditRepository:
             100,
         )
 
+    async def public_user_exists(self, user_id: UUID) -> bool:
+        return True
+
     async def list_for_user(
         self,
         *,
         user_id: UUID,
-        before_created_at: datetime | None,
+        before_sequence: int | None,
         before_id: UUID | None,
         limit: int,
     ) -> list[CreditLedger]:
-        del before_created_at, before_id
+        del before_sequence, before_id
         return [item for item in reversed(self.ledgers) if item.user_id == user_id][:limit]
 
     async def recompute(self, user_id: UUID) -> tuple[int, bool]:

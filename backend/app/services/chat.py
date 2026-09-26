@@ -271,6 +271,7 @@ class ChatService:
             raise AppError(status_code=404, code="message_not_found", message="消息不存在")
         report = await self.repository.report_message(
             reporter_id=user_id,
+            subject_user_id=message.sender_id,
             message_id=message_id,
             reason_code=reason_code,
             details=details.strip() if details and details.strip() else None,

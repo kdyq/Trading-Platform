@@ -53,6 +53,7 @@ class FakeOrderRepository:
         self.proposals: dict[UUID, OrderMeetingProposal] = {}
         self.notifications: list[dict[str, object]] = []
         self.reports: list[object] = []
+        self.report_events: list[object] = []
 
     async def verified_campus_id(self, user_id):  # type: ignore[no-untyped-def]
         return self.campus_id if user_id == self.buyer_id else None
@@ -143,6 +144,9 @@ class FakeOrderRepository:
 
     def add_dispute_report(self, report):  # type: ignore[no-untyped-def]
         self.reports.append(report)
+
+    def add_dispute_report_event(self, event):  # type: ignore[no-untyped-def]
+        self.report_events.append(event)
 
     async def list_orders(  # type: ignore[no-untyped-def]
         self, *, user_id, role, status, before_updated_at, before_id, limit

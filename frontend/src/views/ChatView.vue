@@ -9,11 +9,11 @@ import {
   listConversations,
   listMessages,
   markConversationRead,
-  reportChatMessage,
   sendMessage,
 } from '../api/chat'
 import type { ChatMessage, ConversationSummary } from '../api/chat'
 import { createOrder } from '../api/orders'
+import ReportDialog from '../components/moderation/ReportDialog.vue'
 import UiButton from '../components/ui/UiButton.vue'
 import { useAuthStore } from '../stores/auth'
 
@@ -34,8 +34,7 @@ const draft = ref('')
 const error = ref('')
 const notice = ref('')
 const reportingMessage = ref<DisplayMessage | null>(null)
-const reportReason = ref<'harassment' | 'fraud' | 'spam' | 'unsafe' | 'other'>('harassment')
-const reportDetails = ref('')
+const reportingUser = ref(false)
 const connection = ref<'connecting' | 'live' | 'retrying' | 'offline'>('offline')
 const orderBusy = ref(false)
 const composer = ref<HTMLTextAreaElement | null>(null)
@@ -202,24 +201,6 @@ async function startOrderFromChat() {
     error.value = caught instanceof Error ? caught.message : '暂时无法发起交易'
   } finally {
     orderBusy.value = false
-  }
-}
-
-async function submitReport() {
-  if (!auth.accessToken || !selectedId.value || !reportingMessage.value) return
-  try {
-    await reportChatMessage(
-      auth.accessToken,
-      selectedId.value,
-      reportingMessage.value.id,
-      reportReason.value,
-      reportDetails.value.trim(),
-    )
-    notice.value = '举报已受理。处理结果会通过站内通知告知你。'
-    reportingMessage.value = null
-    reportDetails.value = ''
-  } catch (caught) {
-    error.value = caught instanceof Error ? caught.message : '举报提交失败'
   }
 }
 
@@ -414,6 +395,7 @@ onUnmounted(() => {
             {{ orderBusy ? '创建中…' : '发起交易' }}
           </button>
           <button class="safety-entry" type="button" @click="blockCurrentUser">屏蔽</button>
+          <button class="safety-entry" type="button" @click="reportingUser = true">举报用户</button>
         </header>
 
         <div class="message-history" aria-live="polite" :aria-busy="loadingMessages">
@@ -489,33 +471,24 @@ onUnmounted(() => {
 
     <p v-if="error" class="chat-error" role="alert">{{ error }}</p>
     <p v-if="notice" class="chat-notice" role="status">{{ notice }}</p>
-    <div v-if="reportingMessage" class="report-backdrop" @click.self="reportingMessage = null">
-      <form class="report-card" role="dialog" aria-modal="true" @submit.prevent="submitReport">
-        <p class="eyebrow">安全与治理</p>
-        <h2>举报这条消息</h2>
-        <p>举报将保留目标消息标识用于调查，但不会把私聊正文写入通知。</p>
-        <label>
-          原因
-          <select v-model="reportReason">
-            <option value="harassment">骚扰或辱骂</option>
-            <option value="fraud">疑似诈骗</option>
-            <option value="spam">垃圾信息</option>
-            <option value="unsafe">线下安全风险</option>
-            <option value="other">其他</option>
-          </select>
-        </label>
-        <label>
-          补充说明（可选）
-          <textarea v-model="reportDetails" maxlength="1000" rows="4" />
-        </label>
-        <div>
-          <button class="button button-ghost" type="button" @click="reportingMessage = null">
-            取消
-          </button>
-          <button class="button button-primary" type="submit">提交举报</button>
-        </div>
-      </form>
-    </div>
+    <ReportDialog
+      v-if="reportingMessage"
+      :open="true"
+      target-type="message"
+      :target-id="reportingMessage.id"
+      title="举报这条消息"
+      @close="reportingMessage = null"
+      @submitted="notice = '举报已受理，可在“我的举报”查看进度。'"
+    />
+    <ReportDialog
+      v-if="selected"
+      :open="reportingUser"
+      target-type="user"
+      :target-id="selected.other_user_id"
+      title="举报该用户"
+      @close="reportingUser = false"
+      @submitted="notice = '举报已受理，可在“我的举报”查看进度。'"
+    />
   </section>
 </template>
 

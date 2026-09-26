@@ -109,7 +109,10 @@ async def _exercise_moderation(database_url: str) -> None:
             service = ModerationService(SqlAlchemyModerationRepository(session))
             with pytest.raises(AppError) as denied:
                 await service.list_products(
-                    moderator_id=ordinary_user, status=ProductStatus.PENDING_REVIEW
+                    moderator_id=ordinary_user,
+                    status=ProductStatus.PENDING_REVIEW,
+                    page=1,
+                    page_size=20,
                 )
             assert denied.value.code == "moderation_forbidden"
 

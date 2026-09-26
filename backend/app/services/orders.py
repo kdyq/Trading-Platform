@@ -8,7 +8,7 @@ from uuid import UUID, uuid4
 from app.core.exceptions import AppError
 from app.models.catalog import ProductStatus
 from app.models.identity import CampusVerificationStatus
-from app.models.moderation import ModerationTargetType, Report, ReportStatus
+from app.models.moderation import ModerationTargetType, Report, ReportEvent, ReportStatus
 from app.models.trade import (
     CreditEventType,
     MeetingProposalStatus,
@@ -653,9 +653,21 @@ class OrderService:
             target_id=order.id,
             reason_code=payload.reason_code,
             details=payload.details,
+            subject_user_id=self._other_party(order, user_id),
             status=ReportStatus.OPEN,
         )
         self.repository.add_dispute_report(report)
+        self.repository.add_dispute_report_event(
+            ReportEvent(
+                id=uuid4(),
+                report_id=report.id,
+                actor_id=user_id,
+                from_status=None,
+                to_status=ReportStatus.OPEN,
+                public_note="订单争议举报已提交",
+                event_data={"order_id": str(order.id)},
+            )
+        )
         event = self.repository.add_event(
             order=order,
             actor_id=user_id,

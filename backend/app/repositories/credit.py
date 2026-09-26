@@ -1,12 +1,11 @@
 from collections.abc import Sequence
-from datetime import datetime
 from typing import Protocol, cast
 from uuid import UUID, uuid4
 
 from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.identity import Role, user_roles
+from app.models.identity import Role, User, user_roles
 from app.models.trade import CreditEventType, CreditLedger
 
 
@@ -27,11 +26,13 @@ class CreditRepository(Protocol):
 
     async def summary(self, user_id: UUID) -> int: ...
 
+    async def public_user_exists(self, user_id: UUID) -> bool: ...
+
     async def list_for_user(
         self,
         *,
         user_id: UUID,
-        before_created_at: datetime | None,
+        before_sequence: int | None,
         before_id: UUID | None,
         limit: int,
     ) -> Sequence[CreditLedger]: ...
@@ -80,7 +81,7 @@ class SqlAlchemyCreditRepository:
         previous = await self.session.scalar(
             select(CreditLedger)
             .where(CreditLedger.user_id == user_id)
-            .order_by(CreditLedger.created_at.desc(), CreditLedger.id.desc())
+            .order_by(CreditLedger.sequence_no.desc())
             .limit(1)
         )
         ledger = CreditLedger(
@@ -90,6 +91,7 @@ class SqlAlchemyCreditRepository:
             source_type=source_type,
             reference_id=reference_id,
             rule_version=rule_version,
+            sequence_no=(previous.sequence_no if previous else 0) + 1,
             delta=delta,
             balance_after=(previous.balance_after if previous else 100) + delta,
             reason=reason,
@@ -104,29 +106,33 @@ class SqlAlchemyCreditRepository:
         balance = await self.session.scalar(
             select(CreditLedger.balance_after)
             .where(CreditLedger.user_id == user_id)
-            .order_by(CreditLedger.created_at.desc(), CreditLedger.id.desc())
+            .order_by(CreditLedger.sequence_no.desc())
             .limit(1)
         )
         return int(balance) if balance is not None else 100
+
+    async def public_user_exists(self, user_id: UUID) -> bool:
+        return bool(
+            await self.session.scalar(
+                select(func.count())
+                .select_from(User)
+                .where(User.id == user_id, User.deleted_at.is_(None))
+            )
+        )
 
     async def list_for_user(
         self,
         *,
         user_id: UUID,
-        before_created_at: datetime | None,
+        before_sequence: int | None,
         before_id: UUID | None,
         limit: int,
     ) -> Sequence[CreditLedger]:
         query = select(CreditLedger).where(CreditLedger.user_id == user_id)
-        if before_created_at is not None and before_id is not None:
-            query = query.where(
-                (CreditLedger.created_at < before_created_at)
-                | ((CreditLedger.created_at == before_created_at) & (CreditLedger.id < before_id))
-            )
+        if before_sequence is not None:
+            query = query.where(CreditLedger.sequence_no < before_sequence)
         return list(
-            await self.session.scalars(
-                query.order_by(CreditLedger.created_at.desc(), CreditLedger.id.desc()).limit(limit)
-            )
+            await self.session.scalars(query.order_by(CreditLedger.sequence_no.desc()).limit(limit))
         )
 
     async def recompute(self, user_id: UUID) -> tuple[int, bool]:
@@ -134,7 +140,7 @@ class SqlAlchemyCreditRepository:
             await self.session.scalars(
                 select(CreditLedger)
                 .where(CreditLedger.user_id == user_id)
-                .order_by(CreditLedger.created_at, CreditLedger.id)
+                .order_by(CreditLedger.sequence_no)
             )
         )
         balance = 100

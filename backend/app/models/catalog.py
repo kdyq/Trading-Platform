@@ -154,6 +154,9 @@ class Product(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, VersionMixin
     moderation_reason_code: Mapped[str | None] = mapped_column(String(64))
     moderation_public_note: Mapped[str | None] = mapped_column(Text)
     hidden_from_status: Mapped[str | None] = mapped_column(String(32))
+    moderation_source_report_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("reports.id", ondelete="RESTRICT")
+    )
 
     category: Mapped[Category] = relationship(back_populates="products")
     images: Mapped[list[ProductImage]] = relationship(back_populates="product")

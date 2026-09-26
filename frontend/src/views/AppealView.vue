@@ -2,22 +2,32 @@
 import { ref } from 'vue'
 import { useRoute } from 'vue-router'
 
-import { createReportAppeal } from '../api/moderation'
+import { createReportAppeal, uploadAppealEvidence } from '../api/moderation'
 import { useAuthStore } from '../stores/auth'
 
 const route = useRoute()
 const auth = useAuthStore()
 const details = ref('')
+const evidence = ref<File | null>(null)
 const busy = ref(false)
 const message = ref('')
 const error = ref('')
+
+function chooseEvidence(event: Event) {
+  evidence.value = (event.target as HTMLInputElement).files?.[0] ?? null
+}
 
 async function submit() {
   if (!auth.accessToken || busy.value) return
   busy.value = true
   error.value = ''
   try {
-    await createReportAppeal(auth.accessToken, String(route.params.reportId), details.value.trim())
+    const appeal = await createReportAppeal(
+      auth.accessToken,
+      String(route.params.reportId),
+      details.value.trim(),
+    )
+    if (evidence.value) await uploadAppealEvidence(auth.accessToken, appeal.id, evidence.value)
     message.value = '申诉已提交，将由不同审核员复核。'
   } catch (caught) {
     error.value = caught instanceof Error ? caught.message : '申诉提交失败'
@@ -36,6 +46,10 @@ async function submit() {
       <label>
         <span>申诉说明</span>
         <textarea v-model="details" minlength="10" maxlength="1000" rows="8" required />
+      </label>
+      <label>
+        <span>复核材料（可选，仅授权人员可查看）</span>
+        <input type="file" accept="application/pdf,image/png,image/jpeg" @change="chooseEvidence" />
       </label>
       <button type="submit" :disabled="busy || details.trim().length < 10">
         {{ busy ? '正在提交…' : '提交申诉' }}

@@ -67,13 +67,16 @@ def test_critical_deduplication_constraints_exist() -> None:
         "favorites": "uq_favorites_user_product",
         "messages": "uq_messages_sender_client_message",
         "reviews": "uq_reviews_order_reviewer",
-        "reports": "uq_reports_key",
     }
     for table_name, constraint_name in expected.items():
         assert any(
             isinstance(item, UniqueConstraint) and item.name == constraint_name
             for item in Base.metadata.tables[table_name].constraints
         )
+    assert any(
+        index.name == "uq_reports_active_key" and index.unique
+        for index in Base.metadata.tables["reports"].indexes
+    )
 
 
 def test_money_and_rating_checks_exist() -> None:

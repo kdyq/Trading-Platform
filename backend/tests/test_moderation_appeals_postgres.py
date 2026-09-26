@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from app.core.exceptions import AppError
 from app.db.url import database_url_for_sqlalchemy, require_project_database
 from app.models import Base
+from app.models.identity import User, UserStatus
 from app.models.moderation import ModerationTargetType, Report, ReportAppeal, ReportStatus
 from app.models.trade import CreditLedger
 from app.repositories.credit import SqlAlchemyCreditRepository
@@ -121,6 +122,12 @@ async def _exercise_appeal(database_url: str) -> None:
             appeal_id = appeal.id
 
         async with factory.begin() as session:
+            subject = await session.get(User, subject_id)
+            assert subject is not None
+            subject.status = UserStatus.SUSPENDED
+            subject.suspension_source_report_id = None
+
+        async with factory.begin() as session:
             with pytest.raises(AppError) as same_reviewer:
                 await service(session).review_appeal(
                     reviewer_id=first_reviewer,
@@ -158,6 +165,8 @@ async def _exercise_appeal(database_url: str) -> None:
             assert stored_appeal is not None and stored_appeal.status == "reversed"
             assert credit_sum == 0
             assert credit_count == 2
+            subject = await session.get(User, subject_id)
+            assert subject is not None and subject.status == UserStatus.SUSPENDED
     finally:
         await engine.dispose()
         async with admin_engine.begin() as connection:

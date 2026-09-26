@@ -14,6 +14,7 @@ import {
   proposeMeeting,
 } from '../api/orders'
 import type { MeetingProposal, OrderDetail, OrderStatus } from '../api/orders'
+import ReportDialog from '../components/moderation/ReportDialog.vue'
 import UiButton from '../components/ui/UiButton.vue'
 import { useAuthStore } from '../stores/auth'
 
@@ -21,6 +22,8 @@ const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
 const order = ref<OrderDetail | null>(null)
+const reportOpen = ref(false)
+const reportNotice = ref('')
 const loading = ref(true)
 const busy = ref(false)
 const error = ref('')
@@ -166,6 +169,10 @@ onMounted(load)
       </header>
 
       <p v-if="actionError" class="detail-action-error" role="alert">{{ actionError }}</p>
+      <button class="button button-ghost" type="button" @click="reportOpen = true">
+        举报此订单
+      </button>
+      <p v-if="reportNotice" role="status">{{ reportNotice }}</p>
 
       <div class="order-detail-layout" :class="{ 'without-side': !hasSide }">
         <main class="detail-main">
@@ -400,6 +407,15 @@ onMounted(load)
         </aside>
       </div>
     </template>
+    <ReportDialog
+      v-if="order"
+      :open="reportOpen"
+      target-type="order"
+      :target-id="order.id"
+      title="举报此订单"
+      @close="reportOpen = false"
+      @submitted="reportNotice = '举报已受理，可在“我的举报”查看进度。'"
+    />
   </section>
 </template>
 

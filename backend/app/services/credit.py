@@ -1,4 +1,3 @@
-from datetime import datetime
 from uuid import UUID
 
 from app.core.exceptions import AppError
@@ -8,6 +7,7 @@ from app.schemas.credit import (
     CreditLedgerListResponse,
     CreditLedgerResponse,
     CreditSummaryResponse,
+    PublicCreditSummaryResponse,
 )
 
 RULE_VERSION = "v1"
@@ -49,18 +49,31 @@ class CreditService:
             rule_version=RULE_VERSION,
         )
 
+    async def public_summary(self, user_id: UUID) -> PublicCreditSummaryResponse:
+        if not await self.repository.public_user_exists(user_id):
+            raise AppError(status_code=404, code="user_not_found", message="用户不存在")
+        balance = await self.repository.summary(user_id)
+        level = credit_level(balance)
+        ranges = {
+            "excellent": "120 分及以上",
+            "good": "90–119 分",
+            "caution": "70–89 分",
+            "restricted": "70 分以下",
+        }
+        return PublicCreditSummaryResponse(level=level, range_label=ranges[level])
+
     async def list(
         self,
         *,
         user_id: UUID,
-        before_created_at: datetime | None,
+        before_sequence: int | None,
         before_id: UUID | None,
         limit: int,
     ) -> CreditLedgerListResponse:
         ledgers = list(
             await self.repository.list_for_user(
                 user_id=user_id,
-                before_created_at=before_created_at,
+                before_sequence=before_sequence,
                 before_id=before_id,
                 limit=limit + 1,
             )
@@ -70,7 +83,7 @@ class CreditService:
         cursor = None
         if has_more and items:
             last = items[-1]
-            cursor = f"{last.created_at.isoformat()}|{last.id}"
+            cursor = f"{last.sequence_no}|{last.id}"
         return CreditLedgerListResponse(
             items=[ledger_response(item) for item in items], next_cursor=cursor
         )

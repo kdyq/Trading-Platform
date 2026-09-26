@@ -22,6 +22,11 @@ class CreditSummaryResponse(BaseModel):
     rule_version: str
 
 
+class PublicCreditSummaryResponse(BaseModel):
+    level: str
+    range_label: str
+
+
 class CreditLedgerListResponse(BaseModel):
     items: list[CreditLedgerResponse]
     next_cursor: str | None = None

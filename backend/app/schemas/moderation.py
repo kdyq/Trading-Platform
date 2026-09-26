@@ -24,6 +24,9 @@ class ModerationProductSummary(BaseModel):
 
 class ModerationProductList(BaseModel):
     items: list[ModerationProductSummary]
+    page: int
+    page_size: int
+    total: int
 
 
 class ProductModerationDecision(BaseModel):
@@ -52,6 +55,9 @@ class ModerationReportSummary(BaseModel):
 
 class ModerationReportList(BaseModel):
     items: list[ModerationReportSummary]
+    page: int
+    page_size: int
+    total: int
 
 
 class ReportModerationDecision(BaseModel):
@@ -75,12 +81,16 @@ class ReportAppealResponse(BaseModel):
     status: str
     details: str
     review_reason: str | None
+    evidence_ids: list[UUID] = Field(default_factory=list)
     created_at: datetime
     updated_at: datetime
 
 
 class ReportAppealList(BaseModel):
     items: list[ReportAppealResponse]
+    page: int
+    page_size: int
+    total: int
 
 
 class AppealReviewDecision(BaseModel):

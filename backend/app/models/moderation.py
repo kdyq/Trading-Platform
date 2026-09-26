@@ -2,7 +2,7 @@ from datetime import datetime
 from enum import StrEnum
 from uuid import UUID
 
-from sqlalchemy import JSON, Enum, ForeignKey, Index, String, Text, UniqueConstraint
+from sqlalchemy import JSON, Enum, ForeignKey, Index, String, Text, UniqueConstraint, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, TimestampMixin, UUIDPrimaryKeyMixin, VersionMixin
@@ -40,12 +40,14 @@ class ModerationAction(StrEnum):
 class Report(UUIDPrimaryKeyMixin, TimestampMixin, VersionMixin, Base):
     __tablename__ = "reports"
     __table_args__ = (
-        UniqueConstraint(
+        Index(
+            "uq_reports_active_key",
             "reporter_id",
             "target_type",
             "target_id",
             "reason_code",
-            name="uq_reports_key",
+            unique=True,
+            postgresql_where=text("status IN ('open', 'reviewing')"),
         ),
         Index("ix_reports_status_created", "status", "created_at"),
         Index("ix_reports_target", "target_type", "target_id"),
@@ -142,6 +144,22 @@ class ReportAppeal(UUIDPrimaryKeyMixin, TimestampMixin, VersionMixin, Base):
     status: Mapped[str] = mapped_column(String(24), default="pending", server_default="pending")
     review_reason: Mapped[str | None] = mapped_column(Text)
     reviewed_at: Mapped[datetime | None]
+
+
+class ReportAppealEvidence(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "report_appeal_evidence"
+    __table_args__ = (
+        UniqueConstraint("appeal_id", "sha256", name="uq_appeal_evidence_content"),
+        Index("ix_appeal_evidence_appeal_created", "appeal_id", "created_at"),
+    )
+
+    appeal_id: Mapped[UUID] = mapped_column(ForeignKey("report_appeals.id", ondelete="RESTRICT"))
+    uploader_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"))
+    object_key: Mapped[str] = mapped_column(String(512), unique=True)
+    original_filename: Mapped[str] = mapped_column(String(255))
+    media_type: Mapped[str] = mapped_column(String(80))
+    size_bytes: Mapped[int]
+    sha256: Mapped[str] = mapped_column(String(64))
 
 
 class ModerationRecord(UUIDPrimaryKeyMixin, TimestampMixin, Base):

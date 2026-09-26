@@ -1,11 +1,12 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, File, Query, UploadFile
 from fastapi.responses import FileResponse
 
-from app.api.dependencies import get_moderation_service
+from app.api.dependencies import get_moderation_service, get_settings_from_request
 from app.api.v1.routes.auth import get_auth_context
+from app.core.config import Settings
 from app.models.catalog import ProductStatus
 from app.models.moderation import ReportStatus
 from app.schemas.moderation import (
@@ -20,8 +21,10 @@ from app.schemas.moderation import (
     ReportAppealResponse,
     ReportModerationDecision,
 )
+from app.schemas.reports import ReportEvidenceResponse
 from app.services.auth import AuthContext
 from app.services.moderation import ModerationService
+from app.services.product_storage import PublicProductStorage
 
 router = APIRouter()
 
@@ -31,8 +34,12 @@ async def moderation_products(
     context: Annotated[AuthContext, Depends(get_auth_context)],
     service: Annotated[ModerationService, Depends(get_moderation_service)],
     status: ProductStatus = ProductStatus.PENDING_REVIEW,
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=50)] = 20,
 ) -> ModerationProductList:
-    return await service.list_products(moderator_id=context.user.id, status=status)
+    return await service.list_products(
+        moderator_id=context.user.id, status=status, page=page, page_size=page_size
+    )
 
 
 @router.post("/products/{product_id}/decisions", response_model=ModerationProductSummary)
@@ -53,13 +60,41 @@ async def decide_product(
     )
 
 
+@router.get("/products/{product_id}/images/{image_id}/thumbnail", response_class=FileResponse)
+async def moderation_product_image_thumbnail(
+    product_id: UUID,
+    image_id: UUID,
+    context: Annotated[AuthContext, Depends(get_auth_context)],
+    service: Annotated[ModerationService, Depends(get_moderation_service)],
+    settings: Annotated[Settings, Depends(get_settings_from_request)],
+) -> FileResponse:
+    image = await service.product_image(
+        moderator_id=context.user.id, product_id=product_id, image_id=image_id
+    )
+    stored = PublicProductStorage(settings.resolved_public_product_storage_root).resolve(
+        image.thumbnail_object_key
+    )
+    return FileResponse(
+        stored.path,
+        media_type=stored.media_type,
+        headers={"Cache-Control": "private, no-store"},
+    )
+
+
 @router.get("/reports", response_model=ModerationReportList)
 async def moderation_reports(
     context: Annotated[AuthContext, Depends(get_auth_context)],
     service: Annotated[ModerationService, Depends(get_moderation_service)],
     status: ReportStatus | None = None,
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=50)] = 20,
 ) -> ModerationReportList:
-    return await service.list_reports(moderator_id=context.user.id, status=status)
+    return await service.list_reports(
+        moderator_id=context.user.id,
+        status=status,
+        page=page,
+        page_size=page_size,
+    )
 
 
 @router.post("/reports/{report_id}/decisions", response_model=ModerationReportSummary)
@@ -95,6 +130,47 @@ async def create_report_appeal(
     )
 
 
+@router.post(
+    "/appeals/{appeal_id}/evidence", response_model=ReportEvidenceResponse, status_code=201
+)
+async def upload_appeal_evidence(
+    appeal_id: UUID,
+    context: Annotated[AuthContext, Depends(get_auth_context)],
+    service: Annotated[ModerationService, Depends(get_moderation_service)],
+    evidence: Annotated[UploadFile, File()],
+    settings: Annotated[Settings, Depends(get_settings_from_request)],
+) -> ReportEvidenceResponse:
+    content = await evidence.read(settings.report_evidence_max_bytes + 1)
+    await evidence.close()
+    return await service.upload_appeal_evidence(
+        appellant_id=context.user.id,
+        appeal_id=appeal_id,
+        filename=evidence.filename,
+        media_type=evidence.content_type,
+        content=content,
+    )
+
+
+@router.get("/appeals/{appeal_id}/evidence/{evidence_id}", response_class=FileResponse)
+async def download_appeal_evidence(
+    appeal_id: UUID,
+    evidence_id: UUID,
+    context: Annotated[AuthContext, Depends(get_auth_context)],
+    service: Annotated[ModerationService, Depends(get_moderation_service)],
+) -> FileResponse:
+    item = await service.download_appeal_evidence(
+        user_id=context.user.id,
+        appeal_id=appeal_id,
+        evidence_id=evidence_id,
+    )
+    return FileResponse(
+        item.path,
+        media_type=item.media_type,
+        filename=item.filename,
+        headers={"Cache-Control": "private, no-store"},
+    )
+
+
 @router.post("/appeals/{appeal_id}/decisions", response_model=ReportAppealResponse)
 async def review_report_appeal(
     appeal_id: UUID,
@@ -116,8 +192,10 @@ async def review_report_appeal(
 async def moderation_appeals(
     context: Annotated[AuthContext, Depends(get_auth_context)],
     service: Annotated[ModerationService, Depends(get_moderation_service)],
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=50)] = 20,
 ) -> ReportAppealList:
-    return await service.list_appeals(context.user.id)
+    return await service.list_appeals(context.user.id, page=page, page_size=page_size)
 
 
 @router.get("/reports/{report_id}/evidence/{evidence_id}", response_class=FileResponse)

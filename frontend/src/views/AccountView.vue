@@ -12,11 +12,20 @@ import {
   type Profile,
 } from '../api/account'
 import { ApiError } from '../api/client'
+import {
+  getMyCredit,
+  getMyCreditLedgers,
+  type CreditLedger,
+  type CreditSummary,
+} from '../api/credit'
 import { useAuthStore } from '../stores/auth'
 
 const auth = useAuthStore()
 const router = useRouter()
 const profile = ref<Profile | null>(null)
+const credit = ref<CreditSummary | null>(null)
+const ledgers = ref<CreditLedger[]>([])
+const creditCursor = ref<string | null>(null)
 const sessions = ref<AccountSession[]>([])
 const displayName = ref('')
 const currentPassword = ref('')
@@ -56,7 +65,25 @@ async function load() {
       getProfile(auth.accessToken),
       getSessions(auth.accessToken),
     ])
+    const [creditResult, ledgerResult] = await Promise.all([
+      getMyCredit(auth.accessToken),
+      getMyCreditLedgers(auth.accessToken),
+    ])
+    credit.value = creditResult
+    ledgers.value = ledgerResult.items
+    creditCursor.value = ledgerResult.next_cursor
     displayName.value = profile.value.display_name
+  } catch (error) {
+    errorMessage.value = errorText(error)
+  }
+}
+
+async function loadMoreCredit() {
+  if (!auth.accessToken || !creditCursor.value) return
+  try {
+    const page = await getMyCreditLedgers(auth.accessToken, creditCursor.value)
+    ledgers.value.push(...page.items)
+    creditCursor.value = page.next_cursor
   } catch (error) {
     errorMessage.value = errorText(error)
   }
@@ -135,9 +162,9 @@ onMounted(load)
             <span class="status-chip">
               校园认证：{{ campusStatusLabel(profile.campus_verification_status) }}
             </span>
-            <span class="status-chip">
-              信用状态：{{ profile.credit_status === 'recorded' ? '已有记录' : '暂无记录' }}
-            </span>
+            <span v-if="credit" class="status-chip"
+              >信用 {{ credit.balance }} 分 · {{ credit.level }}</span
+            >
             <RouterLink class="identity-action" to="/campus-verification">管理校园认证</RouterLink>
           </div>
         </article>
@@ -156,6 +183,34 @@ onMounted(load)
           </div>
         </article>
       </div>
+
+      <article v-if="credit" class="account-panel sessions-panel">
+        <div>
+          <p class="eyebrow">可解释信用</p>
+          <h2>我的信用流水</h2>
+          <p>当前 {{ credit.balance }} 分 · 规则 {{ credit.rule_version }}</p>
+        </div>
+        <p v-if="!ledgers.length" class="muted-copy">尚无信用变动，初始分为 100 分。</p>
+        <ul v-else class="session-list">
+          <li v-for="item in ledgers" :key="item.id">
+            <div>
+              <strong>{{ item.reason }}</strong>
+              <span>{{ new Date(item.created_at).toLocaleString('zh-CN') }}</span>
+            </div>
+            <span class="status-chip"
+              >{{ item.delta > 0 ? '+' : '' }}{{ item.delta }} · 余额 {{ item.balance_after }}</span
+            >
+          </li>
+        </ul>
+        <button
+          v-if="creditCursor"
+          class="button button-ghost"
+          type="button"
+          @click="loadMoreCredit"
+        >
+          加载更多
+        </button>
+      </article>
 
       <nav class="account-shortcuts" aria-label="我的交易入口">
         <RouterLink to="/my-products">

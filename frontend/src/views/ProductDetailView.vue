@@ -4,6 +4,7 @@ import { RouterLink, useRoute, useRouter } from 'vue-router'
 
 import { createConversation } from '../api/chat'
 import { ApiError } from '../api/client'
+import { getPublicCredit, type PublicCreditSummary } from '../api/credit'
 import { addFavorite, getFavoriteStatus, getProductDetail, removeFavorite } from '../api/market'
 import type { PublicProductDetail } from '../api/market'
 import { createOrder } from '../api/orders'
@@ -19,6 +20,8 @@ const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
 const product = ref<PublicProductDetail | null>(null)
+const sellerCredit = ref<PublicCreditSummary | null>(null)
+const reportTarget = ref<'product' | 'user'>('product')
 const loading = ref(true)
 const notFound = ref(false)
 const error = ref('')
@@ -97,6 +100,11 @@ function openGate(intent: 'action' | 'report' = 'action') {
   else if (intent === 'action' && auth.user.campus_verification_status !== 'verified')
     gate.value = 'verification'
   else gate.value = 'later'
+}
+
+function openReport(target: 'product' | 'user') {
+  reportTarget.value = target
+  openGate('report')
 }
 
 async function contactSeller() {
@@ -185,6 +193,12 @@ async function loadProduct() {
     const loadedProduct = await getProductDetail(String(route.params.id), requestController.signal)
     if (controller !== requestController) return
     product.value = loadedProduct
+    sellerCredit.value = null
+    void getPublicCredit(loadedProduct.seller.id)
+      .then((summary) => {
+        if (controller === requestController) sellerCredit.value = summary
+      })
+      .catch(() => undefined)
     favoriteCount.value = loadedProduct.favorite_count
     favorited.value = false
     if (auth.accessToken && auth.user?.id !== loadedProduct.seller.id) {
@@ -322,7 +336,7 @@ onUnmounted(() => {
           <p class="eyebrow">物品说明</p>
           <h2>关于这件好物</h2>
           <p class="product-description">{{ product.description }}</p>
-          <button class="text-button report-entry" type="button" @click="openGate('report')">
+          <button class="text-button report-entry" type="button" @click="openReport('product')">
             举报商品
           </button>
           <p v-if="reportNotice" role="status">{{ reportNotice }}</p>
@@ -334,6 +348,17 @@ onUnmounted(() => {
           <p>{{ product.school_name }} · {{ product.campus_name }}</p>
           <UiChip v-if="product.seller.campus_verified" tone="trust">校园身份已认证</UiChip>
           <UiChip v-else tone="warning">校园身份待核验</UiChip>
+          <p v-if="sellerCredit">
+            信用等级：{{ sellerCredit.level }} · {{ sellerCredit.range_label }}
+          </p>
+          <button
+            v-if="!isOwner"
+            class="text-button report-entry"
+            type="button"
+            @click="openReport('user')"
+          >
+            举报卖家
+          </button>
           <div class="seller-credit-grid">
             <div>
               <strong class="num">
@@ -403,9 +428,9 @@ onUnmounted(() => {
     <ReportDialog
       v-if="product"
       :open="reportOpen"
-      target-type="product"
-      :target-id="product.id"
-      title="举报这件商品"
+      :target-type="reportTarget"
+      :target-id="reportTarget === 'product' ? product.id : product.seller.id"
+      :title="reportTarget === 'product' ? '举报这件商品' : '举报卖家'"
       @close="reportOpen = false"
       @submitted="reportNotice = '举报已受理，可在“我的举报”查看进度。'"
     />
