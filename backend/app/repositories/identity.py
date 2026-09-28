@@ -21,6 +21,8 @@ from app.models.trade import CreditLedger, Order
 class IdentityRepository(Protocol):
     async def get_user_by_email(self, email: str) -> User | None: ...
 
+    async def get_user_by_username(self, username: str) -> User | None: ...
+
     async def get_user(self, user_id: UUID) -> User | None: ...
 
     async def create_user(self, user: User) -> User: ...
@@ -75,6 +77,12 @@ class SqlAlchemyIdentityRepository:
     async def get_user_by_email(self, email: str) -> User | None:
         result = await self._session.execute(
             select(User).where(User.login_email == email, User.deleted_at.is_(None))
+        )
+        return result.scalar_one_or_none()
+
+    async def get_user_by_username(self, username: str) -> User | None:
+        result = await self._session.execute(
+            select(User).where(User.username == username, User.deleted_at.is_(None))
         )
         return result.scalar_one_or_none()
 

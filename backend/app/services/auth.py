@@ -116,7 +116,12 @@ class AuthService:
         user_agent: str | None,
         ip_address: str | None,
     ) -> AuthResult:
-        user = await self._repository.get_user_by_email(normalize_email(email))
+        login = normalize_email(email)
+        user = (
+            await self._repository.get_user_by_email(login)
+            if "@" in login
+            else await self._repository.get_user_by_username(login)
+        )
         if user is None:
             self._password_manager.verify_unknown(password)
             raise invalid_credentials()

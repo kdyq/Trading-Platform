@@ -17,7 +17,7 @@ async function submit() {
   errorMessage.value = ''
   try {
     await auth.login(email.value, password.value)
-    await router.push('/')
+    await router.push(auth.user?.must_change_password ? '/account' : '/')
   } catch (error) {
     errorMessage.value = error instanceof ApiError ? error.message : '登录失败，请稍后重试'
   } finally {
@@ -31,11 +31,11 @@ async function submit() {
     <div class="form-card">
       <p class="eyebrow">欢迎回来</p>
       <h1>登录拾光集市</h1>
-      <p>使用普通登录邮箱进入账户。校园认证邮箱在登录后单独填写。</p>
+      <p>使用登录邮箱或管理员用户名进入账户。校园认证邮箱在登录后单独填写。</p>
       <form class="auth-form" @submit.prevent="submit">
         <label class="field">
-          <span>登录邮箱</span>
-          <input v-model.trim="email" autocomplete="email" name="email" required type="email" />
+          <span>登录邮箱或用户名</span>
+          <input v-model.trim="email" autocomplete="username" name="email" required type="text" />
         </label>
         <label class="field">
           <span>密码</span>

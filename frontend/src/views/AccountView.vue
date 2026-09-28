@@ -112,6 +112,7 @@ async function savePassword() {
   errorMessage.value = ''
   try {
     const result = await changePassword(auth.accessToken, currentPassword.value, newPassword.value)
+    if (auth.user) auth.user.must_change_password = false
     currentPassword.value = ''
     newPassword.value = ''
     message.value = result.message

@@ -27,6 +27,9 @@ class MemoryIdentityRepository:
     async def get_user_by_email(self, email: str) -> User | None:
         return next((user for user in self.users.values() if user.login_email == email), None)
 
+    async def get_user_by_username(self, username: str) -> User | None:
+        return next((user for user in self.users.values() if user.username == username), None)
+
     async def get_user(self, user_id: UUID) -> User | None:
         return self.users.get(user_id)
 

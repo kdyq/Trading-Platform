@@ -30,6 +30,8 @@ def user_summary(user: User, campus_status: str) -> UserSummary:
         display_name=user.display_name,
         status=user.status.value,
         campus_verification_status=campus_status,
+        username=user.username,
+        must_change_password=bool(user.must_change_password),
     )
 
 

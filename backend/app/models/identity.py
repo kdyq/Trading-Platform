@@ -131,10 +131,20 @@ class User(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, VersionMixin, B
             postgresql_where=text("deleted_at IS NULL"),
         ),
         Index("ix_users_status", "status"),
+        Index(
+            "uq_users_username",
+            func.lower(text("username")),
+            unique=True,
+            postgresql_where=text("username IS NOT NULL AND deleted_at IS NULL"),
+        ),
     )
 
     login_email: Mapped[str] = mapped_column(String(320))
+    username: Mapped[str | None] = mapped_column(String(32), default=None)
     password_hash: Mapped[str] = mapped_column(String(255))
+    must_change_password: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=text("false")
+    )
     display_name: Mapped[str] = mapped_column(String(80))
     status: Mapped[UserStatus] = mapped_column(
         Enum(

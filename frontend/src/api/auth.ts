@@ -6,6 +6,8 @@ export interface UserSummary {
   display_name: string
   status: string
   campus_verification_status: string
+  username?: string | null
+  must_change_password?: boolean
 }
 
 export interface AuthResponse {

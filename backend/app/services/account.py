@@ -92,6 +92,7 @@ class AccountService:
             )
         validate_password(new_password, email=user.login_email)
         user.password_hash = self._password_manager.hash(new_password)
+        user.must_change_password = False
         await self._repository.update_user(user)
         await self._repository.consume_password_reset_tokens(user.id, at=now)
         await self._repository.revoke_user_sessions(user.id, at=now)
@@ -108,6 +109,7 @@ class AccountService:
             )
         validate_password(new_password, email=context.user.login_email)
         context.user.password_hash = self._password_manager.hash(new_password)
+        context.user.must_change_password = False
         await self._repository.update_user(context.user)
         await self._repository.revoke_other_sessions(
             context.user.id, context.session.id, at=datetime.now(UTC)

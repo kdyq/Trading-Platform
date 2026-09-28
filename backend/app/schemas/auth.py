@@ -26,7 +26,7 @@ class RegisterRequest(BaseModel):
 
 
 class LoginRequest(BaseModel):
-    email: EmailStr
+    email: str = Field(min_length=3, max_length=320)
     password: str = Field(min_length=1, max_length=128)
 
 
@@ -36,6 +36,8 @@ class UserSummary(BaseModel):
     display_name: str
     status: str
     campus_verification_status: str
+    username: str | None = None
+    must_change_password: bool = False
 
 
 class AuthResponse(BaseModel):
