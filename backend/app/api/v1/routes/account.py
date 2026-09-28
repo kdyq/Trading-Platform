@@ -90,7 +90,9 @@ async def profile_response(context: AuthContext, service: AccountService) -> Pro
         login_email=context.user.login_email,
         display_name=context.user.display_name,
         has_avatar=context.user.avatar_key is not None,
-        campus_verification_status=context.campus_verification_status.value,
+        campus_verification_status=(
+            context.account_verification_status or context.campus_verification_status
+        ).value,
         credit_status="recorded" if credit_events else "no_record",
         active_products=active_products,
         favorites=favorites,

@@ -12,8 +12,10 @@ from app.models.identity import (
     CampusVerificationAppeal,
     CampusVerificationStatus,
     PasswordResetToken,
+    Role,
     User,
     UserSession,
+    user_roles,
 )
 from app.models.trade import CreditLedger, Order
 
@@ -40,6 +42,8 @@ class IdentityRepository(Protocol):
     async def revoke_user_sessions(self, user_id: UUID, *, at: datetime) -> None: ...
 
     async def get_campus_verification_status(self, user_id: UUID) -> CampusVerificationStatus: ...
+
+    async def get_business_campus_status(self, user_id: UUID) -> CampusVerificationStatus: ...
 
 
 class AccountRepository(IdentityRepository, Protocol):
@@ -134,6 +138,22 @@ class SqlAlchemyIdentityRepository:
         )
 
     async def get_campus_verification_status(self, user_id: UUID) -> CampusVerificationStatus:
+        super_admin_role = await self._session.scalar(
+            select(Role.id)
+            .select_from(user_roles)
+            .join(Role, Role.id == user_roles.c.role_id)
+            .where(
+                user_roles.c.user_id == user_id,
+                Role.code == "SUPER_ADMIN",
+                Role.deleted_at.is_(None),
+            )
+            .limit(1)
+        )
+        if super_admin_role is not None:
+            return CampusVerificationStatus.VERIFIED
+        return await self.get_business_campus_status(user_id)
+
+    async def get_business_campus_status(self, user_id: UUID) -> CampusVerificationStatus:
         verification_result = await self._session.execute(
             select(CampusVerification)
             .where(

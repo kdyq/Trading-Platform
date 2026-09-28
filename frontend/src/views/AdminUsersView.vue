@@ -114,7 +114,7 @@ onMounted(load)
                 <strong>{{ item.display_name }}</strong
                 ><small>{{ item.id }}</small>
               </td>
-              <td>{{ item.email }}</td>
+              <td>{{ item.email || '无邮箱' }}</td>
               <td>{{ item.campus_status }}</td>
               <td>
                 <span class="status" :data-status="item.status">{{ item.status }}</span>

@@ -46,7 +46,7 @@ class AccountService:
             )
             raise
         user = await self._repository.get_user_by_email(normalized_email)
-        if user is None or user.status != UserStatus.ACTIVE:
+        if user is None or user.status != UserStatus.ACTIVE or user.login_email is None:
             self._password_manager.verify_unknown("password-reset-timing-probe")
             return
         raw_token, digest, expires_at = self._token_manager.issue_single_use_token(
@@ -90,7 +90,7 @@ class AccountService:
                 code="password_reset_invalid",
                 message="重置链接无效或已过期",
             )
-        validate_password(new_password, email=user.login_email)
+        validate_password(new_password, email=user.login_email or "")
         user.password_hash = self._password_manager.hash(new_password)
         user.must_change_password = False
         await self._repository.update_user(user)
@@ -107,7 +107,7 @@ class AccountService:
                 code="current_password_invalid",
                 message="当前密码不正确",
             )
-        validate_password(new_password, email=context.user.login_email)
+        validate_password(new_password, email=context.user.login_email or "")
         context.user.password_hash = self._password_manager.hash(new_password)
         context.user.must_change_password = False
         await self._repository.update_user(context.user)

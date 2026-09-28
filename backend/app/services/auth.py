@@ -28,6 +28,7 @@ class AuthContext:
     session: UserSession
     claims: AccessClaims
     campus_verification_status: CampusVerificationStatus
+    account_verification_status: CampusVerificationStatus | None = None
 
 
 class AuthService:
@@ -193,12 +194,14 @@ class AuthService:
             raise AppError(
                 status_code=401, code="invalid_access_token", message="登录状态无效或已过期"
             )
-        campus_status = await self._repository.get_campus_verification_status(user.id)
+        account_status = await self._repository.get_campus_verification_status(user.id)
+        campus_status = await self._repository.get_business_campus_status(user.id)
         return AuthContext(
             user=user,
             session=session,
             claims=claims,
             campus_verification_status=campus_status,
+            account_verification_status=account_status,
         )
 
     async def logout(self, refresh_token: str) -> None:
@@ -247,7 +250,7 @@ def normalize_email(email: str) -> str:
 
 
 def invalid_credentials() -> AppError:
-    return AppError(status_code=401, code="invalid_credentials", message="邮箱或密码不正确")
+    return AppError(status_code=401, code="invalid_credentials", message="账号或密码不正确")
 
 
 def invalid_refresh_token() -> AppError:

@@ -63,12 +63,28 @@ def auth_response(result: AuthResult) -> AuthResponse:
 
 
 async def get_auth_context(
+    request: Request,
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer)],
     service: Annotated[AuthService, Depends(get_auth_service)],
 ) -> AuthContext:
     if credentials is None or credentials.scheme.lower() != "bearer":
         raise AppError(status_code=401, code="authentication_required", message="请先登录")
-    return await service.authenticate(credentials.credentials)
+    context = await service.authenticate(credentials.credentials)
+    if context.user.must_change_password:
+        allowed = {
+            ("GET", "/api/v1/auth/me"),
+            ("POST", "/api/v1/auth/logout-all"),
+            ("GET", "/api/v1/account/profile"),
+            ("GET", "/api/v1/account/sessions"),
+            ("POST", "/api/v1/account/password-change"),
+        }
+        if (request.method, request.url.path) not in allowed:
+            raise AppError(
+                status_code=403,
+                code="password_change_required",
+                message="请先修改初始密码",
+            )
+    return context
 
 
 @router.post("/email-verifications", response_model=MessageResponse, status_code=202)
@@ -174,4 +190,7 @@ async def logout_all(
 
 @router.get("/me", response_model=UserSummary)
 async def me(context: Annotated[AuthContext, Depends(get_auth_context)]) -> UserSummary:
-    return user_summary(context.user, context.campus_verification_status.value)
+    return user_summary(
+        context.user,
+        (context.account_verification_status or context.campus_verification_status).value,
+    )

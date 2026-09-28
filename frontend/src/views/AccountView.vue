@@ -65,13 +65,15 @@ async function load() {
       getProfile(auth.accessToken),
       getSessions(auth.accessToken),
     ])
-    const [creditResult, ledgerResult] = await Promise.all([
-      getMyCredit(auth.accessToken),
-      getMyCreditLedgers(auth.accessToken),
-    ])
-    credit.value = creditResult
-    ledgers.value = ledgerResult.items
-    creditCursor.value = ledgerResult.next_cursor
+    if (!auth.user?.must_change_password) {
+      const [creditResult, ledgerResult] = await Promise.all([
+        getMyCredit(auth.accessToken),
+        getMyCreditLedgers(auth.accessToken),
+      ])
+      credit.value = creditResult
+      ledgers.value = ledgerResult.items
+      creditCursor.value = ledgerResult.next_cursor
+    }
     displayName.value = profile.value.display_name
   } catch (error) {
     errorMessage.value = errorText(error)
@@ -117,6 +119,7 @@ async function savePassword() {
     newPassword.value = ''
     message.value = result.message
     sessions.value = await getSessions(auth.accessToken)
+    await load()
   } catch (error) {
     errorMessage.value = errorText(error)
   } finally {
@@ -150,6 +153,9 @@ onMounted(load)
       {{ errorMessage }}
     </p>
     <p v-if="message" class="form-message success-message" role="status">{{ message }}</p>
+    <p v-if="auth.user?.must_change_password" class="form-message" role="status">
+      首次登录请先修改初始密码，完成后才能使用其他功能。
+    </p>
 
     <template v-if="profile">
       <div class="account-grid">
@@ -159,14 +165,22 @@ onMounted(load)
           </div>
           <div>
             <h2>{{ profile.display_name }}</h2>
-            <p>{{ profile.login_email }}</p>
+            <p>{{ profile.login_email || '未绑定登录邮箱' }}</p>
             <span class="status-chip">
               校园认证：{{ campusStatusLabel(profile.campus_verification_status) }}
             </span>
+            <p v-if="auth.user?.username === 'guo' && !profile.login_email">
+              超级管理员免校验；校园交易仍需真实校园认证。
+            </p>
             <span v-if="credit" class="status-chip"
               >信用 {{ credit.balance }} 分 · {{ credit.level }}</span
             >
-            <RouterLink class="identity-action" to="/campus-verification">管理校园认证</RouterLink>
+            <RouterLink
+              v-if="!auth.user?.must_change_password"
+              class="identity-action"
+              to="/campus-verification"
+              >管理校园认证</RouterLink
+            >
           </div>
         </article>
         <article class="account-panel stats-panel" aria-label="账户统计">
@@ -213,7 +227,11 @@ onMounted(load)
         </button>
       </article>
 
-      <nav class="account-shortcuts" aria-label="我的交易入口">
+      <nav
+        v-if="!auth.user?.must_change_password"
+        class="account-shortcuts"
+        aria-label="我的交易入口"
+      >
         <RouterLink to="/my-products">
           <strong>我的发布</strong>
           <span>{{ profile.active_products }} 件在售</span>
@@ -229,7 +247,11 @@ onMounted(load)
       </nav>
 
       <div class="account-grid">
-        <form class="account-panel auth-form" @submit.prevent="saveProfile">
+        <form
+          v-if="!auth.user?.must_change_password"
+          class="account-panel auth-form"
+          @submit.prevent="saveProfile"
+        >
           <div>
             <p class="eyebrow">公开资料</p>
             <h2>修改昵称</h2>

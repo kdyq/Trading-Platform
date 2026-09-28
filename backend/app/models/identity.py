@@ -124,6 +124,14 @@ class User(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, VersionMixin, B
     __tablename__ = "users"
     __table_args__ = (
         CheckConstraint("login_email = lower(login_email)", name="login_email_lowercase"),
+        CheckConstraint(
+            "login_email IS NOT NULL OR username IS NOT NULL", name="login_identity_present"
+        ),
+        CheckConstraint(
+            "(login_email IS NULL AND login_email_verified_at IS NULL) OR "
+            "(login_email IS NOT NULL AND login_email_verified_at IS NOT NULL)",
+            name="login_email_verification_consistent",
+        ),
         Index(
             "uq_users_login_email",
             func.lower(text("login_email")),
@@ -139,7 +147,7 @@ class User(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, VersionMixin, B
         ),
     )
 
-    login_email: Mapped[str] = mapped_column(String(320))
+    login_email: Mapped[str | None] = mapped_column(String(320))
     username: Mapped[str | None] = mapped_column(String(32), default=None)
     password_hash: Mapped[str] = mapped_column(String(255))
     must_change_password: Mapped[bool] = mapped_column(
@@ -158,7 +166,7 @@ class User(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, VersionMixin, B
         server_default=UserStatus.ACTIVE.value,
     )
     last_login_at: Mapped[datetime | None]
-    login_email_verified_at: Mapped[datetime]
+    login_email_verified_at: Mapped[datetime | None]
     user_agreement_version: Mapped[str] = mapped_column(String(64))
     privacy_policy_version: Mapped[str] = mapped_column(String(64))
     terms_agreed_at: Mapped[datetime]

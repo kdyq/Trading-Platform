@@ -6,6 +6,7 @@ from fastapi.responses import FileResponse
 
 from app.api.dependencies import get_campus_service
 from app.api.v1.routes.auth import get_auth_context
+from app.models.identity import CampusVerificationStatus
 from app.schemas.campus import (
     AppealResponse,
     AppealSummary,
@@ -138,7 +139,10 @@ async def campus_status(
     context: Annotated[AuthContext, Depends(get_auth_context)],
     service: Annotated[CampusService, Depends(get_campus_service)],
 ) -> CampusStatusResponse:
-    return state_response(await service.state(context.user.id))
+    response = state_response(await service.state(context.user.id))
+    if context.account_verification_status == CampusVerificationStatus.VERIFIED:
+        response.status = CampusVerificationStatus.VERIFIED.value
+    return response
 
 
 @router.post("/appeals", response_model=AppealResponse, status_code=201)

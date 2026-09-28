@@ -71,6 +71,9 @@ class MemoryIdentityRepository:
     async def get_campus_verification_status(self, user_id: UUID) -> CampusVerificationStatus:
         return CampusVerificationStatus.UNAPPLIED
 
+    async def get_business_campus_status(self, user_id: UUID) -> CampusVerificationStatus:
+        return await self.get_campus_verification_status(user_id)
+
     async def update_user(self, user: User) -> None:
         self.users[user.id] = user
 
@@ -234,6 +237,7 @@ def test_registration_verifies_email_and_sets_secure_session_cookie() -> None:
     assert mailer.messages == [("student@example.com", "123456")]
     user = next(iter(repository.users.values()))
     assert user.password_hash != "market2026"
+    assert user.login_email_verified_at is not None
     assert user.login_email_verified_at.tzinfo == UTC
 
 

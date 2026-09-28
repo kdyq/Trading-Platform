@@ -24,7 +24,7 @@ class AdminCapabilities(BaseModel):
 class StaffSummary(BaseModel):
     id: UUID
     username: str | None
-    email: str
+    email: str | None
     display_name: str
     status: UserStatus
     roles: list[str]
@@ -60,7 +60,7 @@ class StatusUpdate(ReasonModel):
 class UserSummaryAdmin(BaseModel):
     id: UUID
     username: str | None
-    email: str
+    email: str | None
     display_name: str
     status: UserStatus
     campus_status: str

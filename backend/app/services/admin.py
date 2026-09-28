@@ -28,6 +28,7 @@ from app.models.identity import (
 )
 from app.models.moderation import AuditLog
 from app.models.notification import Notification
+from app.repositories.identity import SqlAlchemyIdentityRepository
 from app.schemas.admin import (
     AdminCapabilities,
     CampusAppealListAdmin,
@@ -45,7 +46,9 @@ from app.schemas.catalog import AdminCampusResponse, AdminCategoryResponse
 from app.services.auth import AuthContext
 
 
-def masked_email(email: str) -> str:
+def masked_email(email: str | None) -> str | None:
+    if email is None:
+        return None
     name, separator, domain = email.partition("@")
     return f"{name[:1]}***@{domain}" if separator else "***"
 
@@ -537,19 +540,16 @@ class AdminService:
 
     async def _user_summary(self, user: User, *, email_visible: bool) -> UserSummaryAdmin:
         # Campus email and private material are never part of this general-purpose projection.
-        latest = await self.session.scalar(
-            select(CampusVerification.status)
-            .where(CampusVerification.user_id == user.id, CampusVerification.deleted_at.is_(None))
-            .order_by(CampusVerification.created_at.desc(), CampusVerification.id.desc())
-            .limit(1)
-        )
+        campus_status = await SqlAlchemyIdentityRepository(
+            self.session
+        ).get_campus_verification_status(user.id)
         return UserSummaryAdmin(
             id=user.id,
             username=user.username,
             email=user.login_email if email_visible else masked_email(user.login_email),
             display_name=user.display_name,
             status=user.status,
-            campus_status=latest.value if latest is not None else "unapplied",
+            campus_status=campus_status.value,
             created_at=user.created_at,
         )
 

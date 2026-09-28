@@ -2,7 +2,7 @@ import { requestJson } from './client'
 
 export interface Profile {
   id: string
-  login_email: string
+  login_email: string | null
   display_name: string
   has_avatar: boolean
   campus_verification_status: string

@@ -6,7 +6,7 @@ from uuid import uuid4
 import pytest
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
-from sqlalchemy import insert, select
+from sqlalchemy import delete, insert, select
 
 from app.core.config import Settings, get_settings
 from app.core.exceptions import AppError
@@ -20,11 +20,10 @@ from app.models.identity import CampusVerificationStatus, Role, User, UserStatus
 from app.repositories.identity import SqlAlchemyIdentityRepository
 from app.schemas.admin import AuditExportCreate, StaffRolesUpdate
 from app.schemas.moderation import AppealReviewDecision, ProductModerationDecision
-from app.services.account import AccountService
 from app.services.admin import AdminService
 from app.services.auth import AuthService
 from app.services.email_verification import UnavailableVerificationCodeStore
-from app.services.mailer import UnavailableAccountMailer, UnavailableVerificationMailer
+from app.services.mailer import UnavailableVerificationMailer
 from app.workers.audit_export import claim, process_job, prune_unavailable_files
 
 
@@ -62,7 +61,9 @@ def test_bootstrap_permissions_and_staff_guards(tmp_path) -> None:  # type: igno
     schema = os.getenv("DATABASE_SCHEMA")
     if not database_url or not schema:
         pytest.skip("PostgreSQL gate schema is required")
-    changed_password, support_email, support_password = asyncio.run(_exercise(database_url, schema))
+    initial_password, changed_password, support_email, support_password = asyncio.run(
+        _exercise(database_url, schema)
+    )
     app = create_app(
         Settings(
             database_url=database_url,
@@ -74,11 +75,32 @@ def test_bootstrap_permissions_and_staff_guards(tmp_path) -> None:  # type: igno
     with TestClient(app) as client:
         assert client.get("/api/v1/admin/staff").status_code == 401
         logged_in = client.post(
-            "/api/v1/auth/login", json={"email": "guo", "password": changed_password}
+            "/api/v1/auth/login", json={"email": "guo", "password": initial_password}
         )
         assert logged_in.status_code == 200
+        assert logged_in.json()["user"]["login_email"] is None
+        assert logged_in.json()["user"]["campus_verification_status"] == "verified"
+        assert logged_in.json()["user"]["must_change_password"] is True
         token = logged_in.json()["access_token"]
         headers = {"Authorization": f"Bearer {token}"}
+        assert client.get("/api/v1/account/profile", headers=headers).json()["login_email"] is None
+        for path in (
+            "/api/v1/campus/status",
+            "/api/v1/campus/capabilities/publish",
+            "/api/v1/admin/staff",
+            "/api/v1/orders",
+        ):
+            blocked = client.get(path, headers=headers)
+            assert blocked.status_code == 403
+            assert blocked.json()["code"] == "password_change_required"
+        changed = client.post(
+            "/api/v1/account/password-change",
+            headers=headers,
+            json={"current_password": initial_password, "new_password": changed_password},
+        )
+        assert changed.status_code == 200
+        assert client.get("/api/v1/campus/status", headers=headers).json()["status"] == "verified"
+        assert client.get("/api/v1/campus/capabilities/publish", headers=headers).status_code == 403
         assert (
             "staff:manage" in client.get("/api/v1/admin/me", headers=headers).json()["permissions"]
         )
@@ -110,7 +132,9 @@ def test_bootstrap_permissions_and_staff_guards(tmp_path) -> None:  # type: igno
         assert client.get("/api/v1/admin/staff", headers=support_headers).status_code == 403
         users = client.get("/api/v1/admin/users", headers=support_headers)
         assert users.status_code == 200
-        assert all("***@" in item["email"] for item in users.json()["items"])
+        assert all(
+            item["email"] is None or "***@" in item["email"] for item in users.json()["items"]
+        )
         assert (
             client.get(
                 f"/api/v1/admin/users?query={support_email}", headers=support_headers
@@ -290,17 +314,16 @@ async def _suspend_user(database_url: str, schema: str, user_id) -> None:  # typ
         await engine.dispose()
 
 
-async def _exercise(database_url: str, schema: str) -> tuple[str, str, str]:
+async def _exercise(database_url: str, schema: str) -> tuple[str, str, str, str]:
     settings = Settings(
         database_url=database_url,
         auth_secret_key="stage-nine-secret-longer-than-thirty-two-characters",
         environment="test",
     )
     password = f"Initial{uuid4().hex}9"
-    email = f"stage9-{uuid4().hex}@example.com"
-    await bootstrap(email, password)
+    await bootstrap(password)
     with pytest.raises(RuntimeError, match="already exists"):
-        await bootstrap(email, "DifferentSecret9381")
+        await bootstrap("DifferentSecret9381")
 
     engine = create_database_engine(database_url, schema=schema)
     factory = create_session_factory(engine)
@@ -317,6 +340,8 @@ async def _exercise(database_url: str, schema: str) -> tuple[str, str, str]:
             assert user is not None
             assert user.password_hash != password
             assert PasswordManager().verify(user.password_hash, password)
+            assert user.login_email is None
+            assert user.login_email_verified_at is None
             assert user.must_change_password
             auth = AuthService(
                 repository=SqlAlchemyIdentityRepository(session),
@@ -331,25 +356,25 @@ async def _exercise(database_url: str, schema: str) -> tuple[str, str, str]:
             )
             context = await auth.authenticate(logged_in.access_token)
             assert context.user.id == user.id
+            assert context.account_verification_status == CampusVerificationStatus.VERIFIED
+            assert context.campus_verification_status == CampusVerificationStatus.UNAPPLIED
             admin = AdminService(session, settings)
             with pytest.raises(AppError) as forced:
                 await admin.require(context, "staff:manage")
             assert forced.value.code == "password_change_required"
-            account = AccountService(
-                repository=SqlAlchemyIdentityRepository(session),
-                request_limiter=UnavailableVerificationCodeStore(),
-                mailer=UnavailableAccountMailer(),
-                password_manager=PasswordManager(),
-                token_manager=tokens,
-                settings=settings,
+            super_role = await session.scalar(select(Role).where(Role.code == "SUPER_ADMIN"))
+            assert super_role is not None
+            await session.execute(
+                delete(user_roles).where(
+                    user_roles.c.user_id == user.id,
+                    user_roles.c.role_id == super_role.id,
+                )
             )
-            await account.change_password(
-                context=context,
-                current_password=password,
-                new_password=changed_password,
+            assert (
+                await SqlAlchemyIdentityRepository(session).get_campus_verification_status(user.id)
+                == CampusVerificationStatus.UNAPPLIED
             )
-            await admin.require(context, "staff:manage")
-            assert not user.must_change_password
+            await session.execute(insert(user_roles).values(user_id=user.id, role_id=super_role.id))
 
             for role_code, permissions in ROLE_PERMISSIONS.items():
                 role = await session.scalar(select(Role).where(Role.code == role_code))
@@ -407,4 +432,4 @@ async def _exercise(database_url: str, schema: str) -> tuple[str, str, str]:
                     assert allowed == (permission in permissions), (role_code, permission)
     finally:
         await engine.dispose()
-    return changed_password, support_email, support_password
+    return password, changed_password, support_email, support_password

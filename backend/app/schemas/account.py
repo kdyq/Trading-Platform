@@ -31,7 +31,7 @@ class ProfileUpdateRequest(BaseModel):
 
 class ProfileResponse(BaseModel):
     id: UUID
-    login_email: EmailStr
+    login_email: EmailStr | None
     display_name: str
     has_avatar: bool
     campus_verification_status: str

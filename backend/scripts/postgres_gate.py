@@ -85,9 +85,10 @@ def main() -> None:
     try:
         run(environment, "-m", "alembic", "upgrade", "head")
         run(environment, "-m", "alembic", "check")
-        run(environment, "-m", "pytest", "-q", *POSTGRES_TESTS)
+        # Round-trip an empty schema: username-only identities cannot be downgraded losslessly.
         run(environment, "-m", "alembic", "downgrade", "base")
         run(environment, "-m", "alembic", "upgrade", "head")
+        run(environment, "-m", "pytest", "-q", *POSTGRES_TESTS)
         run(environment, "-m", "app.db.seed")
         run(environment, "-m", "app.db.seed")
         asyncio.run(verify_seed(database_url, schema))

@@ -32,7 +32,7 @@ class LoginRequest(BaseModel):
 
 class UserSummary(BaseModel):
     id: UUID
-    login_email: EmailStr
+    login_email: EmailStr | None
     display_name: str
     status: str
     campus_verification_status: str

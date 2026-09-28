@@ -16,7 +16,7 @@ export interface AdminCapabilities {
 export interface Staff {
   id: string
   username: string | null
-  email: string
+  email: string | null
   display_name: string
   status: string
   roles: string[]
@@ -26,7 +26,7 @@ export interface Staff {
 export interface ManagedUser {
   id: string
   username: string | null
-  email: string
+  email: string | null
   display_name: string
   status: string
   campus_status: string

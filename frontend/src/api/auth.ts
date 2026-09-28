@@ -2,7 +2,7 @@ import { requestJson } from './client'
 
 export interface UserSummary {
   id: string
-  login_email: string
+  login_email: string | null
   display_name: string
   status: string
   campus_verification_status: string
