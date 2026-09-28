@@ -3,7 +3,23 @@ from decimal import Decimal
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+
+class ModerationReasonModel(BaseModel):
+    @field_validator(
+        "reason_code",
+        "public_note",
+        "public_result",
+        "internal_reason",
+        "reason",
+        "override_reason",
+        mode="before",
+        check_fields=False,
+    )
+    @classmethod
+    def trim_reason(cls, value: object) -> object:
+        return value.strip() if isinstance(value, str) else value
 
 
 class ModerationProductSummary(BaseModel):
@@ -29,12 +45,13 @@ class ModerationProductList(BaseModel):
     total: int
 
 
-class ProductModerationDecision(BaseModel):
+class ProductModerationDecision(ModerationReasonModel):
     action: Literal["approve", "reject", "hide", "restore"]
     version: int = Field(ge=1)
     reason_code: str = Field(min_length=3, max_length=64)
     public_note: str = Field(min_length=5, max_length=500)
     request_id: str = Field(min_length=8, max_length=64, pattern=r"^[A-Za-z0-9_-]+$")
+    confirm_target: UUID | None = None
 
 
 class ModerationReportSummary(BaseModel):
@@ -60,7 +77,7 @@ class ModerationReportList(BaseModel):
     total: int
 
 
-class ReportModerationDecision(BaseModel):
+class ReportModerationDecision(ModerationReasonModel):
     action: Literal["review", "dismiss", "violate"]
     version: int = Field(ge=1)
     penalty_code: Literal["none", "warn", "hide", "suspend"] = "none"
@@ -69,6 +86,7 @@ class ReportModerationDecision(BaseModel):
     internal_reason: str = Field(min_length=5, max_length=1000)
     evidence_ids: list[UUID] = Field(default_factory=list, max_length=20)
     request_id: str = Field(min_length=8, max_length=64, pattern=r"^[A-Za-z0-9_-]+$")
+    confirm_target: UUID | None = None
 
 
 class ReportAppealCreate(BaseModel):
@@ -93,8 +111,9 @@ class ReportAppealList(BaseModel):
     total: int
 
 
-class AppealReviewDecision(BaseModel):
+class AppealReviewDecision(ModerationReasonModel):
     action: Literal["uphold", "reverse"]
     reason: str = Field(min_length=5, max_length=1000)
     override_reason: str | None = Field(default=None, min_length=5, max_length=500)
     request_id: str = Field(min_length=8, max_length=64, pattern=r"^[A-Za-z0-9_-]+$")
+    confirm_target: UUID | None = None

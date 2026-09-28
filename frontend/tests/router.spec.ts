@@ -11,25 +11,29 @@ beforeEach(() => {
     'fetch',
     vi.fn().mockImplementation((input: RequestInfo | URL) => {
       const url = String(input)
-      const payload = url.includes('/api/v1/orders')
-        ? { items: [], next_cursor: null }
-        : url.includes('/seller/products')
-          ? { items: [] }
-          : url.endsWith('/api/v1/favorites')
-            ? { items: [], total: 0, page: 1, page_size: 1 }
-            : url.includes('/market/categories') || url.includes('/market/campuses')
-              ? []
-              : url.includes('/market/products')
-                ? { items: [], total: 0, page: 1, page_size: 4 }
-                : url.includes('/market/summary')
-                  ? { available_products: 0, active_campuses: 0, verified_sellers: 0 }
-                  : {
-                      status: 'ready',
-                      dependencies: {
-                        database: { status: 'ready', reason: null },
-                        redis: { status: 'ready', reason: null },
-                      },
-                    }
+      const payload = url.includes('/api/v1/admin/me')
+        ? { roles: ['REVIEWER'], permissions: ['moderation:review'], must_change_password: false }
+        : url.includes('/api/v1/moderation/')
+          ? { items: [], total: 0, page: 1, page_size: 20 }
+          : url.includes('/api/v1/orders')
+            ? { items: [], next_cursor: null }
+            : url.includes('/seller/products')
+              ? { items: [] }
+              : url.endsWith('/api/v1/favorites')
+                ? { items: [], total: 0, page: 1, page_size: 1 }
+                : url.includes('/market/categories') || url.includes('/market/campuses')
+                  ? []
+                  : url.includes('/market/products')
+                    ? { items: [], total: 0, page: 1, page_size: 4 }
+                    : url.includes('/market/summary')
+                      ? { available_products: 0, active_campuses: 0, verified_sellers: 0 }
+                      : {
+                          status: 'ready',
+                          dependencies: {
+                            database: { status: 'ready', reason: null },
+                            redis: { status: 'ready', reason: null },
+                          },
+                        }
       return Promise.resolve(new Response(JSON.stringify(payload), { status: 200 }))
     }),
   )
@@ -71,7 +75,8 @@ describe('application routes', () => {
     ['/my-products', '我的发布', true],
     ['/favorites', '我的收藏', true],
     ['/orders', '我的订单', true],
-    ['/admin', '商品审核工作台', false],
+    ['/admin', '登录拾光集市', false],
+    ['/admin', '商品审核工作台', true],
     ['/missing', '这个摊位还没有摆出来', false],
   ])('renders %s', async (path, expectedText, authenticated) => {
     const wrapper = await renderRoute(path, authenticated)

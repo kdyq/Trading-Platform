@@ -222,9 +222,11 @@ class SqlAlchemyCampusRepository:
             .join(Role, Role.id == user_roles.c.role_id)
             .join(role_permissions, role_permissions.c.role_id == Role.id)
             .join(Permission, Permission.id == role_permissions.c.permission_id)
+            .join(User, User.id == user_roles.c.user_id)
             .where(
                 user_roles.c.user_id == user_id,
                 Role.deleted_at.is_(None),
+                User.must_change_password.is_(False),
                 Permission.code == permission_code,
             )
             .limit(1)

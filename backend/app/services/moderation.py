@@ -96,6 +96,12 @@ class ModerationService:
             title = "商品已暂时隐藏"
         elif action == "restore":
             self._require_status(product, {ProductStatus.HIDDEN})
+            if product.moderation_source_report_id is not None:
+                raise AppError(
+                    status_code=409,
+                    code="report_appeal_required",
+                    message="举报处罚中的商品需经申诉复核后恢复",
+                )
             try:
                 restored = ProductStatus(product.hidden_from_status or "")
             except ValueError:

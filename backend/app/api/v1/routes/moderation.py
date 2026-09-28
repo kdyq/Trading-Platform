@@ -5,8 +5,10 @@ from fastapi import APIRouter, Depends, File, Query, UploadFile
 from fastapi.responses import FileResponse
 
 from app.api.dependencies import get_moderation_service, get_settings_from_request
+from app.api.v1.routes.admin import get_admin_service
 from app.api.v1.routes.auth import get_auth_context
 from app.core.config import Settings
+from app.core.exceptions import AppError
 from app.models.catalog import ProductStatus
 from app.models.moderation import ReportStatus
 from app.schemas.moderation import (
@@ -22,6 +24,7 @@ from app.schemas.moderation import (
     ReportModerationDecision,
 )
 from app.schemas.reports import ReportEvidenceResponse
+from app.services.admin import AdminService
 from app.services.auth import AuthContext
 from app.services.moderation import ModerationService
 from app.services.product_storage import PublicProductStorage
@@ -48,7 +51,14 @@ async def decide_product(
     payload: ProductModerationDecision,
     context: Annotated[AuthContext, Depends(get_auth_context)],
     service: Annotated[ModerationService, Depends(get_moderation_service)],
+    admin: Annotated[AdminService, Depends(get_admin_service)],
 ) -> ModerationProductSummary:
+    if payload.action in {"hide", "restore"}:
+        if payload.confirm_target != product_id:
+            raise AppError(
+                status_code=422, code="confirmation_required", message="请再次确认目标商品"
+            )
+        await admin.require(context, "moderation:review", high_risk=True)
     return await service.decide_product(
         moderator_id=context.user.id,
         product_id=product_id,
@@ -103,7 +113,14 @@ async def decide_report(
     payload: ReportModerationDecision,
     context: Annotated[AuthContext, Depends(get_auth_context)],
     service: Annotated[ModerationService, Depends(get_moderation_service)],
+    admin: Annotated[AdminService, Depends(get_admin_service)],
 ) -> ModerationReportSummary:
+    if payload.action == "violate" and payload.penalty_code == "suspend":
+        if payload.confirm_target != report_id:
+            raise AppError(
+                status_code=422, code="confirmation_required", message="请再次确认目标举报"
+            )
+        await admin.require(context, "moderation:suspend", high_risk=True)
     return await service.decide_report(
         moderator_id=context.user.id,
         report_id=report_id,
@@ -177,7 +194,14 @@ async def review_report_appeal(
     payload: AppealReviewDecision,
     context: Annotated[AuthContext, Depends(get_auth_context)],
     service: Annotated[ModerationService, Depends(get_moderation_service)],
+    admin: Annotated[AdminService, Depends(get_admin_service)],
 ) -> ReportAppealResponse:
+    if payload.action == "reverse":
+        if payload.confirm_target != appeal_id:
+            raise AppError(
+                status_code=422, code="confirmation_required", message="请再次确认目标申诉"
+            )
+        await admin.require(context, "moderation:review", high_risk=True)
     return await service.review_appeal(
         reviewer_id=context.user.id,
         appeal_id=appeal_id,

@@ -13,6 +13,7 @@ from app.models.identity import (
     Permission,
     Role,
     School,
+    User,
     role_permissions,
     user_roles,
 )
@@ -89,10 +90,12 @@ class SqlAlchemyCatalogRepository:
             .join(role_permissions, role_permissions.c.permission_id == Permission.id)
             .join(Role, Role.id == role_permissions.c.role_id)
             .join(user_roles, user_roles.c.role_id == Role.id)
+            .join(User, User.id == user_roles.c.user_id)
             .where(
                 user_roles.c.user_id == user_id,
                 Permission.code == permission_code,
                 Role.deleted_at.is_(None),
+                User.must_change_password.is_(False),
             )
             .limit(1)
         )

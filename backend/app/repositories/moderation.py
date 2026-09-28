@@ -36,10 +36,12 @@ class SqlAlchemyModerationRepository:
         count = await self.session.scalar(
             select(func.count())
             .select_from(user_roles.join(Role, user_roles.c.role_id == Role.id))
+            .join(User, User.id == user_roles.c.user_id)
             .where(
                 user_roles.c.user_id == user_id,
                 Role.code.in_(roles),
                 Role.deleted_at.is_(None),
+                User.must_change_password.is_(False),
             )
         )
         return bool(count)

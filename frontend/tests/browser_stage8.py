@@ -16,6 +16,7 @@ sys.path.insert(0, str(ROOT / "backend"))
 
 from app.core.config import Settings  # noqa: E402
 from app.core.security import TokenManager  # noqa: E402
+from app.db.seed import seed_roles_and_permissions  # noqa: E402
 from app.db.url import database_url_for_sqlalchemy  # noqa: E402
 from scripts.postgres_gate import load_database_url  # noqa: E402
 
@@ -113,6 +114,7 @@ async def prepare() -> tuple[dict[UUID, str], str]:
     try:
         async with engine.begin() as connection:
             await clean(connection, settings.resolved_private_storage_root)
+            await seed_roles_and_permissions(connection)
             await connection.execute(
                 text(
                     "INSERT INTO schools (id, code, name) VALUES (:id, 'STAGE8', '阶段八测试大学')"
@@ -310,6 +312,7 @@ def run() -> None:
             subject.get_by_text("申诉已提交").wait_for()
 
             reviewer_two = contexts[REVIEWER_TWO_ID].new_page()
+            reviewer_two.on("dialog", lambda dialog: dialog.accept())
             reviewer_two.goto(f"{BASE_URL}/admin")
             appeal_card = (
                 reviewer_two.locator(".report-review-card")

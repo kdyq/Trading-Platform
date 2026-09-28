@@ -96,7 +96,44 @@ const router = createRouter({
     {
       path: '/admin',
       component: () => import('../layouts/AdminLayout.vue'),
-      children: [{ path: '', name: 'admin', component: () => import('../views/AdminView.vue') }],
+      children: [
+        { path: '', name: 'admin', component: () => import('../views/AdminView.vue') },
+        {
+          path: 'dashboard',
+          name: 'admin-dashboard',
+          component: () => import('../views/AdminDashboardView.vue'),
+        },
+        {
+          path: 'users',
+          name: 'admin-users',
+          component: () => import('../views/AdminUsersView.vue'),
+        },
+        {
+          path: 'products',
+          name: 'admin-products',
+          component: () => import('../views/AdminProductsView.vue'),
+        },
+        {
+          path: 'campus-appeals',
+          name: 'admin-campus-appeals',
+          component: () => import('../views/AdminCampusView.vue'),
+        },
+        {
+          path: 'catalog',
+          name: 'admin-catalog',
+          component: () => import('../views/AdminCatalogView.vue'),
+        },
+        {
+          path: 'staff',
+          name: 'admin-staff',
+          component: () => import('../views/AdminStaffView.vue'),
+        },
+        {
+          path: 'audit',
+          name: 'admin-audit',
+          component: () => import('../views/AdminAuditView.vue'),
+        },
+      ],
     },
   ],
   scrollBehavior: () => ({ top: 0 }),

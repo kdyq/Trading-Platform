@@ -48,6 +48,7 @@ export async function decideModerationProduct(
       reason_code: reasonCode,
       public_note: publicNote,
       request_id: crypto.randomUUID().replaceAll('-', ''),
+      confirm_target: product.id,
     },
   })
 }
@@ -96,6 +97,7 @@ export async function decideModerationReport(
       version: report.version,
       evidence_ids: report.evidence_ids,
       request_id: crypto.randomUUID().replaceAll('-', ''),
+      confirm_target: report.id,
     },
   })
 }
@@ -155,6 +157,7 @@ export async function reviewReportAppeal(
       action,
       reason,
       request_id: crypto.randomUUID().replaceAll('-', ''),
+      confirm_target: appealId,
     },
   })
 }

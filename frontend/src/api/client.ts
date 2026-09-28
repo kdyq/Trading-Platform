@@ -77,7 +77,7 @@ export async function requestJson<T>(path: string, options: RequestOptions = {})
 
 export async function requestBlob(path: string, accessToken: string): Promise<Blob> {
   const controller = new AbortController()
-  const timeout = window.setTimeout(() => controller.abort(), 5000)
+  const timeout = window.setTimeout(() => controller.abort(), 30000)
   try {
     const response = await fetch(`${API_BASE_URL}${path}`, {
       credentials: 'include',

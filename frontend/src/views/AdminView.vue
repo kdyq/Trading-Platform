@@ -114,6 +114,7 @@ async function reviewAppeal(appeal: ReportAppeal, action: 'uphold' | 'reverse') 
     error.value = '请填写申诉复核理由。'
     return
   }
+  if (action === 'reverse' && !window.confirm('确认撤销原处罚并生成反向信用流水？')) return
   busyId.value = appeal.id
   try {
     Object.assign(appeal, await reviewReportAppeal(auth.accessToken, appeal.id, action, reason))
@@ -132,6 +133,12 @@ async function decideReport(report: ModerationReport, action: 'review' | 'dismis
     error.value = '请填写公开结论和内部调查理由。'
     return
   }
+  if (
+    action === 'violate' &&
+    reportPenalties.value[report.id] === 'suspend' &&
+    !window.confirm('确认暂停目标用户并撤销其会话？')
+  )
+    return
   busyId.value = report.id
   try {
     const updated = await decideModerationReport(auth.accessToken, report, {
@@ -160,6 +167,11 @@ async function decide(
     error.value = '请填写至少 5 个字的公开处理说明。'
     return
   }
+  if (
+    (action === 'hide' || action === 'restore') &&
+    !window.confirm(`确认${action === 'hide' ? '隐藏' : '恢复'}此商品？`)
+  )
+    return
   busyId.value = product.id
   error.value = ''
   try {

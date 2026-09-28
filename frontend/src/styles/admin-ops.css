@@ -1,0 +1,163 @@
+.admin-ops {
+  width: min(100%, 1180px);
+  display: grid;
+  align-content: start;
+  gap: 1.25rem;
+}
+.admin-ops header {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: end;
+  gap: 1rem;
+}
+.admin-ops h1 {
+  margin: 0.25rem 0;
+  font-size: clamp(1.8rem, 3vw, 2.7rem);
+  letter-spacing: -0.035em;
+}
+.admin-ops h2 {
+  margin: 0;
+  font-size: 1.15rem;
+}
+.admin-ops p {
+  margin: 0.25rem 0;
+  color: var(--ink-2);
+}
+.admin-ops .eyebrow {
+  color: var(--primary-deep);
+  font-size: 0.74rem;
+  font-weight: 900;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+.admin-ops-card {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: clamp(1rem, 2vw, 1.5rem);
+  background: var(--card);
+  box-shadow: var(--shadow);
+}
+.admin-ops-toolbar,
+.admin-ops-actions,
+.admin-ops-pager {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  align-items: center;
+}
+.admin-ops-toolbar {
+  margin-bottom: 1rem;
+}
+.admin-ops input,
+.admin-ops select,
+.admin-ops textarea {
+  min-width: 0;
+  max-width: 100%;
+  border: 1px solid #dbcbb8;
+  border-radius: 10px;
+  padding: 0.62rem 0.8rem;
+  background: white;
+  color: var(--ink);
+}
+.admin-ops textarea {
+  width: 100%;
+  min-height: 64px;
+  resize: vertical;
+}
+.admin-ops button {
+  border: 0;
+  border-radius: 999px;
+  padding: 0.62rem 1rem;
+  background: var(--primary);
+  color: white;
+  font-weight: 800;
+  cursor: pointer;
+}
+.admin-ops button.secondary {
+  border: 1px solid var(--line);
+  background: white;
+  color: var(--ink);
+}
+.admin-ops button.safe {
+  background: var(--leaf);
+}
+.admin-ops button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.admin-ops-table-wrap {
+  overflow-x: auto;
+}
+.admin-ops table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+.admin-ops th,
+.admin-ops td {
+  border-bottom: 1px solid var(--line);
+  padding: 0.85rem 0.6rem;
+  text-align: left;
+  vertical-align: top;
+}
+.admin-ops th {
+  color: var(--ink-2);
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+}
+.admin-ops td strong {
+  display: block;
+}
+.admin-ops td small {
+  color: var(--ink-2);
+}
+.admin-ops .status {
+  display: inline-flex;
+  border-radius: 999px;
+  padding: 0.25rem 0.6rem;
+  background: var(--leaf-soft);
+  color: var(--leaf);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+.admin-ops .status[data-status='disabled'],
+.admin-ops .status[data-status='suspended'] {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+.admin-ops .error {
+  color: var(--danger);
+}
+.admin-ops .success {
+  color: var(--leaf);
+}
+.admin-ops-pager {
+  justify-content: flex-end;
+  padding-top: 1rem;
+}
+.admin-ops .metric-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(175px, 1fr));
+  gap: 1rem;
+}
+.admin-ops .metric {
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 1.2rem;
+  background: white;
+}
+.admin-ops .metric strong {
+  display: block;
+  margin-top: 0.5rem;
+  color: var(--primary-deep);
+  font: 800 clamp(1.8rem, 3vw, 2.5rem) var(--font-number);
+}
+@media (max-width: 720px) {
+  .admin-ops th,
+  .admin-ops td {
+    min-width: 110px;
+  }
+}

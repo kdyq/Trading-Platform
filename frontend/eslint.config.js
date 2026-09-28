@@ -24,6 +24,7 @@ export default tseslint.config(
       'vue/html-self-closing': 'off',
       'vue/multi-word-component-names': 'off',
       'vue/singleline-html-element-content-newline': 'off',
+      'vue/multiline-html-element-content-newline': 'off',
     },
   },
 )
