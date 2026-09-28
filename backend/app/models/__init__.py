@@ -1,5 +1,6 @@
 """SQLAlchemy 领域模型。"""
 
+from app.models.admin import AuditExportJob
 from app.models.base import Base
 from app.models.catalog import (
     Category,
@@ -66,6 +67,7 @@ from app.models.trade import (
 __all__ = [
     "Base",
     "AuditLog",
+    "AuditExportJob",
     "Campus",
     "CampusAppealStatus",
     "CampusVerification",
