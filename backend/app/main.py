@@ -1,4 +1,5 @@
 import asyncio
+import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager, suppress
 
@@ -27,7 +28,9 @@ from app.workers.order_expiration import OrderExpirationCoordinator
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     settings: Settings = app.state.settings
     app.state.database_engine = (
-        create_database_engine(settings.database_url) if settings.database_url else None
+        create_database_engine(settings.database_url, schema=os.getenv("DATABASE_SCHEMA"))
+        if settings.database_url
+        else None
     )
     app.state.session_factory = (
         create_session_factory(app.state.database_engine)

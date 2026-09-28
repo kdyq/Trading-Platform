@@ -24,6 +24,7 @@ POSTGRES_TESTS = (
     "tests/test_credit_postgres.py",
     "tests/test_moderation_postgres.py",
     "tests/test_moderation_appeals_postgres.py",
+    "tests/test_admin_postgres.py",
 )
 
 
