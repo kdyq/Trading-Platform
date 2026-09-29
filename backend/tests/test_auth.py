@@ -77,6 +77,16 @@ class MemoryIdentityRepository:
     async def update_user(self, user: User) -> None:
         self.users[user.id] = user
 
+    async def close_account(self, user_id: UUID, *, at: datetime) -> None:
+        user = self.users[user_id]
+        user.login_email = None
+        user.login_email_verified_at = None
+        user.username = f"closed_{user_id.hex[:24]}"
+        user.display_name = "已注销用户"
+        user.status = UserStatus.DISABLED
+        user.deleted_at = at
+        await self.revoke_user_sessions(user_id, at=at)
+
     async def profile_counts(self, user_id: UUID) -> tuple[int, int, int, int]:
         return 0, 0, 0, 0
 
@@ -302,6 +312,20 @@ def test_password_policy_rejects_common_sequences_and_repetition() -> None:
 def test_production_cookie_is_secure_and_untrusted_origin_is_rejected() -> None:
     client, _, _, _ = auth_test_client(environment="production")
     with client:
+        from typing import Any, cast
+
+        from fastapi import FastAPI
+        from redis.asyncio import Redis
+
+        from app.core.rate_limits import RequestLimiter
+
+        class WorkingCounter:
+            async def eval(self, *_args: Any) -> int:
+                return 1
+
+        cast(FastAPI, client.app).state.request_limiter = RequestLimiter(
+            cast(Redis, WorkingCounter())
+        )
         request_code(client)
         registered = client.post("/api/v1/auth/register", json=registration_payload())
         client.cookies.set(

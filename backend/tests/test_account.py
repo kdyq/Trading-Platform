@@ -61,6 +61,22 @@ def register(client: TestClient) -> tuple[str, str]:
     return response.json()["access_token"], response.cookies["shiguang_refresh"]
 
 
+def test_account_closure_redacts_identity_and_revokes_sessions() -> None:
+    client, repository, _, _ = account_client()
+    with client:
+        access, refresh = register(client)
+        headers = {"Authorization": f"Bearer {access}"}
+        closed = client.delete("/api/v1/account/profile", headers=headers)
+        assert closed.status_code == 200
+        assert client.get("/api/v1/account/profile", headers=headers).status_code == 401
+        client.cookies.set("shiguang_refresh", refresh, path="/api/v1/auth")
+        assert client.post("/api/v1/auth/refresh").status_code == 401
+    user = next(iter(repository.users.values()))
+    assert user.login_email is None
+    assert user.display_name == "已注销用户"
+    assert user.deleted_at is not None
+
+
 def test_password_reset_is_single_use_and_revokes_all_sessions() -> None:
     client, repository, mailer, password_manager = account_client()
     with client:

@@ -122,7 +122,11 @@ async function submit() {
         </label>
         <label class="consent-row">
           <input v-model="acceptPrivacyPolicy" required type="checkbox" />
-          <span>我已阅读并同意当前版本的《隐私政策》</span>
+          <span
+            >我已阅读并同意当前版本的<RouterLink to="/privacy" target="_blank"
+              >《隐私说明》</RouterLink
+            ></span
+          >
         </label>
         <p v-if="statusMessage" class="form-message success-message" aria-live="polite">
           {{ statusMessage }}

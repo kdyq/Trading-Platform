@@ -29,16 +29,16 @@ return count
 
 
 class WebSocketTicketStore(Protocol):
-    async def issue(self, user_id: UUID) -> tuple[str, int]: ...
+    async def issue(self, user_id: UUID, session_id: UUID) -> tuple[str, int]: ...
 
-    async def consume(self, ticket: str) -> UUID | None: ...
+    async def consume(self, ticket: str) -> tuple[UUID, UUID] | None: ...
 
 
 class UnavailableWebSocketTicketStore:
-    async def issue(self, user_id: UUID) -> tuple[str, int]:
+    async def issue(self, user_id: UUID, session_id: UUID) -> tuple[str, int]:
         raise AppError(status_code=503, code="realtime_unavailable", message="实时通信暂不可用")
 
-    async def consume(self, ticket: str) -> UUID | None:
+    async def consume(self, ticket: str) -> tuple[UUID, UUID] | None:
         return None
 
 
@@ -51,11 +51,11 @@ class RedisWebSocketTicketStore:
     def _key(ticket: str) -> str:
         return f"chat:ws-ticket:{sha256(ticket.encode()).hexdigest()}"
 
-    async def issue(self, user_id: UUID) -> tuple[str, int]:
+    async def issue(self, user_id: UUID, session_id: UUID) -> tuple[str, int]:
         ticket = token_urlsafe(32)
         try:
             created = await self._redis.set(
-                self._key(ticket), str(user_id), ex=self._ttl_seconds, nx=True
+                self._key(ticket), f"{user_id}:{session_id}", ex=self._ttl_seconds, nx=True
             )
         except Exception as exc:
             raise AppError(
@@ -67,7 +67,7 @@ class RedisWebSocketTicketStore:
             raise AppError(status_code=503, code="realtime_unavailable", message="实时通信暂不可用")
         return ticket, self._ttl_seconds
 
-    async def consume(self, ticket: str) -> UUID | None:
+    async def consume(self, ticket: str) -> tuple[UUID, UUID] | None:
         if len(ticket) > 128:
             return None
         value = await cast(
@@ -76,7 +76,8 @@ class RedisWebSocketTicketStore:
         if value is None:
             return None
         try:
-            return UUID(value)
+            user_id, session_id = value.split(":", 1)
+            return UUID(user_id), UUID(session_id)
         except ValueError:
             return None
 
@@ -150,36 +151,66 @@ class RedisChatMessageLimiter:
 
 
 class RealtimeHub:
-    def __init__(self) -> None:
-        self._connections: dict[UUID, set[WebSocket]] = defaultdict(set)
-        self._lock = asyncio.Lock()
+    MAX_SOCKETS_PER_USER = 5
 
-    async def connect(self, user_id: UUID, websocket: WebSocket) -> None:
+    def __init__(
+        self, session_is_active: Callable[[UUID, UUID], Awaitable[bool]] | None = None
+    ) -> None:
+        self._connections: dict[UUID, dict[WebSocket, UUID]] = defaultdict(dict)
+        self._lock = asyncio.Lock()
+        self._session_is_active = session_is_active
+
+    async def is_authorized(self, user_id: UUID, session_id: UUID) -> bool:
+        if self._session_is_active is None:
+            return True
+        try:
+            return await self._session_is_active(user_id, session_id)
+        except Exception:
+            logger.warning("realtime session validation unavailable", exc_info=True)
+            return False
+
+    async def connect(self, user_id: UUID, session_id: UUID, websocket: WebSocket) -> bool:
         await websocket.accept()
         async with self._lock:
-            self._connections[user_id].add(websocket)
+            if len(self._connections[user_id]) >= self.MAX_SOCKETS_PER_USER:
+                accepted = False
+            else:
+                self._connections[user_id][websocket] = session_id
+                accepted = True
+        if not accepted:
+            await websocket.close(code=4429, reason="too many connections")
+        return accepted
 
     async def disconnect(self, user_id: UUID, websocket: WebSocket) -> None:
         async with self._lock:
             sockets = self._connections.get(user_id)
             if sockets is None:
                 return
-            sockets.discard(websocket)
+            sockets.pop(websocket, None)
             if not sockets:
                 self._connections.pop(user_id, None)
 
     async def send_user(self, user_id: UUID, payload: dict[str, Any]) -> bool:
         async with self._lock:
-            sockets = tuple(self._connections.get(user_id, ()))
+            sockets = tuple(self._connections.get(user_id, {}).items())
         failed: list[WebSocket] = []
-        for websocket in sockets:
+        delivered = False
+        for websocket, session_id in sockets:
+            if not await self.is_authorized(user_id, session_id):
+                try:
+                    await websocket.close(code=4401, reason="session expired")
+                except Exception:
+                    pass
+                failed.append(websocket)
+                continue
             try:
                 await websocket.send_json(payload)
+                delivered = True
             except Exception:
                 failed.append(websocket)
         for websocket in failed:
             await self.disconnect(user_id, websocket)
-        return bool(sockets) and len(failed) < len(sockets)
+        return delivered
 
 
 class RealtimePublisher(Protocol):

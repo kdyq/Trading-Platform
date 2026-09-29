@@ -4,6 +4,7 @@ import { RouterLink, useRouter } from 'vue-router'
 
 import {
   changePassword,
+  closeAccount,
   getProfile,
   getSessions,
   revokeSession,
@@ -33,6 +34,8 @@ const newPassword = ref('')
 const busy = ref(false)
 const message = ref('')
 const errorMessage = ref('')
+const showClosure = ref(false)
+const closureConfirmation = ref('')
 
 function errorText(error: unknown) {
   return error instanceof ApiError ? error.message : '操作失败，请稍后重试'
@@ -135,6 +138,21 @@ async function removeSession(session: AccountSession) {
     sessions.value = sessions.value.filter((item) => item.id !== session.id)
   } catch (error) {
     errorMessage.value = errorText(error)
+  }
+}
+
+async function closeMyAccount() {
+  if (!auth.accessToken || closureConfirmation.value !== '注销账号') return
+  busy.value = true
+  errorMessage.value = ''
+  try {
+    await closeAccount(auth.accessToken)
+    auth.$reset()
+    await router.replace('/')
+  } catch (error) {
+    errorMessage.value = errorText(error)
+  } finally {
+    busy.value = false
   }
 }
 
@@ -316,6 +334,36 @@ onMounted(load)
             </button>
           </li>
         </ul>
+      </article>
+
+      <article v-if="!auth.user?.must_change_password" class="account-panel sessions-panel">
+        <div>
+          <p class="eyebrow">账号注销</p>
+          <h2>关闭我的账号</h2>
+          <p>注销会退出所有设备、隐藏发布并清除登录标识。未完成订单或治理事项需先处理。</p>
+          <RouterLink class="identity-action" to="/privacy">查看隐私与清理说明</RouterLink>
+        </div>
+        <button
+          v-if="!showClosure"
+          class="button button-ghost"
+          type="button"
+          @click="showClosure = true"
+        >
+          了解并申请注销
+        </button>
+        <form v-else class="auth-form" @submit.prevent="closeMyAccount">
+          <label class="field">
+            <span>输入“注销账号”确认</span>
+            <input v-model.trim="closureConfirmation" autocomplete="off" />
+          </label>
+          <button
+            class="button button-ghost"
+            :disabled="busy || closureConfirmation !== '注销账号'"
+            type="submit"
+          >
+            确认注销
+          </button>
+        </form>
       </article>
     </template>
   </section>

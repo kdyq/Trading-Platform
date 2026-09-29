@@ -166,6 +166,26 @@ async def run_once() -> int:
     completed = 0
     try:
         await prune_unavailable_files(factory, settings.resolved_private_storage_root)
+        from app.services.private_storage import PrivateAppealStorage
+        from app.services.product_storage import LocalObjectStorage
+        from app.services.retention import (
+            cleanup_closed_account_images,
+            cleanup_expired_campus_appeals,
+            cleanup_inactive_session_metadata,
+        )
+
+        async with transaction_scope(factory) as session:
+            await cleanup_expired_campus_appeals(
+                session,
+                PrivateAppealStorage(
+                    settings.resolved_private_storage_root,
+                    max_bytes=settings.campus_appeal_max_bytes,
+                ),
+            )
+            await cleanup_closed_account_images(
+                session, LocalObjectStorage(settings.resolved_public_product_storage_root)
+            )
+            await cleanup_inactive_session_metadata(session)
         while job_id := await claim(factory):
             await process_job(factory, job_id, settings.resolved_private_storage_root)
             completed += 1

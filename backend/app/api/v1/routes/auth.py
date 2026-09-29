@@ -50,7 +50,9 @@ def set_refresh_cookie(response: Response, result: AuthResult, *, settings: Sett
 def require_trusted_origin(request: Request, settings: Settings) -> None:
     origin = request.headers.get("origin")
     trusted_origins = {value.rstrip("/") for value in settings.cors_origins}
-    if origin is not None and origin.rstrip("/") not in trusted_origins:
+    if (origin is not None and origin.rstrip("/") not in trusted_origins) or (
+        origin is None and request.headers.get("sec-fetch-site") == "cross-site"
+    ):
         raise AppError(status_code=403, code="untrusted_origin", message="请求来源不受信任")
 
 
@@ -126,6 +128,13 @@ async def login(
     service: Annotated[AuthService, Depends(get_auth_service)],
     settings: Annotated[Settings, Depends(get_settings_from_request)],
 ) -> AuthResponse:
+    await request.app.state.request_limiter.check(
+        bucket="login-account",
+        subject=str(payload.email).strip().lower(),
+        maximum=8,
+        window_seconds=900,
+        fail_closed=settings.environment == "production",
+    )
     result = await service.login(
         email=str(payload.email),
         password=payload.password,

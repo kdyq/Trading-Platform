@@ -49,6 +49,13 @@ export function updateProfile(accessToken: string, displayName: string) {
   })
 }
 
+export function closeAccount(accessToken: string) {
+  return requestJson<{ message: string }>('/api/v1/account/profile', {
+    method: 'DELETE',
+    accessToken,
+  })
+}
+
 export function changePassword(accessToken: string, currentPassword: string, newPassword: string) {
   return requestJson<{ message: string }>('/api/v1/account/password-change', {
     method: 'POST',

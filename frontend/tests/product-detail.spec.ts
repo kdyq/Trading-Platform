@@ -77,6 +77,21 @@ afterEach(() => {
 })
 
 describe('product detail', () => {
+  it('renders seller supplied fields as text', async () => {
+    const malicious = '<img src=x onerror=alert(1)>'
+    const { wrapper } = await renderDetail({
+      ...product,
+      title: malicious,
+      description: malicious,
+      seller_name: malicious,
+      seller: { ...product.seller, display_name: malicious },
+    })
+    expect(wrapper.text()).toContain(malicious)
+    expect(wrapper.find('img[onerror]').exists()).toBe(false)
+    expect(wrapper.html()).toContain('&lt;img src=x onerror=alert(1)&gt;')
+    wrapper.unmount()
+  })
+
   it('renders trustworthy facts, SEO metadata, and the visitor login gate', async () => {
     const { wrapper } = await renderDetail()
     expect(wrapper.text()).toContain('少量笔记，无缺页。')

@@ -46,7 +46,7 @@ async def websocket_ticket(
     context: Annotated[AuthContext, Depends(get_auth_context)],
     store: Annotated[WebSocketTicketStore, Depends(get_websocket_ticket_store)],
 ) -> WebSocketTicketResponse:
-    ticket, expires_in = await store.issue(context.user.id)
+    ticket, expires_in = await store.issue(context.user.id, context.session.id)
     return WebSocketTicketResponse(ticket=ticket, expires_in=expires_in)
 
 
@@ -54,27 +54,41 @@ async def websocket_ticket(
 async def websocket_endpoint(
     websocket: WebSocket, ticket: str = Query(min_length=16, max_length=128)
 ) -> None:
+    origin = websocket.headers.get("origin")
+    trusted = {value.rstrip("/") for value in websocket.app.state.settings.cors_origins}
+    if origin is not None and origin.rstrip("/") not in trusted:
+        await websocket.close(code=4403, reason="untrusted origin")
+        return
     redis = websocket.app.state.redis
     if redis is None:
         await websocket.accept()
         await websocket.close(code=1013, reason="realtime unavailable")
         return
     try:
-        user_id = await RedisWebSocketTicketStore(redis).consume(ticket)
+        identity = await RedisWebSocketTicketStore(redis).consume(ticket)
     except Exception:
         await websocket.accept()
         await websocket.close(code=1013, reason="realtime unavailable")
         return
-    if user_id is None:
+    if identity is None:
         await websocket.accept()
         await websocket.close(code=4401, reason="invalid ticket")
         return
     hub = cast(RealtimeHub, websocket.app.state.realtime_hub)
-    await hub.connect(user_id, websocket)
+    user_id, session_id = identity
+    if not await hub.is_authorized(user_id, session_id):
+        await websocket.accept()
+        await websocket.close(code=4401, reason="session expired")
+        return
+    if not await hub.connect(user_id, session_id, websocket):
+        return
     await websocket.send_json({"type": "chat.ready", "data": {"user_id": str(user_id)}})
     try:
         while True:
             message = await asyncio.wait_for(websocket.receive_json(), timeout=45)
+            if not await hub.is_authorized(user_id, session_id):
+                await websocket.close(code=4401, reason="session expired")
+                break
             if isinstance(message, dict) and message.get("type") == "ping":
                 await websocket.send_json({"type": "pong"})
             else:

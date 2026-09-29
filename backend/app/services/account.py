@@ -120,6 +120,10 @@ class AccountService:
         await self._repository.update_user(user)
         return user
 
+    async def close_account(self, context: AuthContext) -> None:
+        self.require_recent_auth(context)
+        await self._repository.close_account(context.user.id, at=datetime.now(UTC))
+
     async def profile_counts(self, user_id: UUID) -> tuple[int, int, int, int]:
         return await self._repository.profile_counts(user_id)
 

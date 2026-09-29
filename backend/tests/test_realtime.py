@@ -1,6 +1,6 @@
 import asyncio
 from typing import Any, cast
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from fastapi.testclient import TestClient
@@ -59,13 +59,14 @@ def ticket_store() -> tuple[RedisWebSocketTicketStore, MemoryTicketRedis]:
 async def test_websocket_ticket_is_short_lived_opaque_and_single_use() -> None:
     store, redis = ticket_store()
     user_id = uuid4()
+    session_id = uuid4()
 
-    ticket, expires_in = await store.issue(user_id)
+    ticket, expires_in = await store.issue(user_id, session_id)
 
     assert expires_in == 60
     assert str(user_id) not in ticket
     assert all(ticket not in key for key in redis.values)
-    assert await store.consume(ticket) == user_id
+    assert await store.consume(ticket) == (user_id, session_id)
     assert await store.consume(ticket) is None
 
 
@@ -74,10 +75,68 @@ async def test_ticket_issue_maps_redis_failure_to_stable_service_unavailable() -
     store = RedisWebSocketTicketStore(cast(Redis, FailingTicketRedis()))
 
     with pytest.raises(AppError) as unavailable:
-        await store.issue(uuid4())
+        await store.issue(uuid4(), uuid4())
 
     assert unavailable.value.status_code == 503
     assert unavailable.value.code == "realtime_unavailable"
+
+
+@pytest.mark.anyio
+async def test_revoked_session_stops_realtime_delivery() -> None:
+    from fastapi import WebSocket
+
+    active = True
+    user_id, session_id = uuid4(), uuid4()
+
+    async def validate(_user_id: UUID, _session_id: UUID) -> bool:
+        assert (_user_id, _session_id) == (user_id, session_id)
+        return active
+
+    class RecordingSocket:
+        def __init__(self) -> None:
+            self.messages: list[dict[str, object]] = []
+            self.close_code: int | None = None
+
+        async def accept(self) -> None:
+            return None
+
+        async def send_json(self, payload: dict[str, object]) -> None:
+            self.messages.append(payload)
+
+        async def close(self, *, code: int, reason: str) -> None:
+            self.close_code = code
+
+    socket = RecordingSocket()
+    hub = RealtimeHub(validate)
+    await hub.connect(user_id, session_id, cast(WebSocket, socket))
+    assert await hub.send_user(user_id, {"type": "chat.message.created"})
+    active = False
+    assert not await hub.send_user(user_id, {"type": "chat.message.created"})
+    assert len(socket.messages) == 1
+    assert socket.close_code == 4401
+
+
+@pytest.mark.anyio
+async def test_realtime_hub_bounds_connections_per_user() -> None:
+    from fastapi import WebSocket
+
+    class RecordingSocket:
+        def __init__(self) -> None:
+            self.close_code: int | None = None
+
+        async def accept(self) -> None:
+            return None
+
+        async def close(self, *, code: int, reason: str) -> None:
+            self.close_code = code
+
+    hub = RealtimeHub()
+    user_id, session_id = uuid4(), uuid4()
+    sockets = [RecordingSocket() for _ in range(6)]
+    for socket in sockets[:5]:
+        assert await hub.connect(user_id, session_id, cast(WebSocket, socket))
+    assert not await hub.connect(user_id, session_id, cast(WebSocket, sockets[5]))
+    assert sockets[5].close_code == 4429
 
 
 @pytest.mark.anyio
@@ -121,7 +180,7 @@ def test_websocket_requires_single_use_ticket_and_answers_heartbeat() -> None:
     app = create_app(Settings(database_url=None, redis_url=None))
     store, redis = ticket_store()
     user_id = uuid4()
-    ticket, _ = asyncio.run(store.issue(user_id))
+    ticket, _ = asyncio.run(store.issue(user_id, uuid4()))
 
     with TestClient(app) as client:
         app.state.redis = cast(Redis, redis)

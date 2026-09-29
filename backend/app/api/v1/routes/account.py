@@ -2,12 +2,12 @@ import logging
 from typing import Annotated, cast
 from uuid import UUID
 
-from fastapi import APIRouter, BackgroundTasks, Depends, FastAPI, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, FastAPI, Request, Response
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.api.dependencies import get_account_service
-from app.api.v1.routes.auth import get_auth_context
+from app.api.v1.routes.auth import REFRESH_COOKIE, get_auth_context
 from app.core.config import Settings
 from app.core.exceptions import AppError
 from app.core.security import PasswordManager, TokenManager
@@ -159,6 +159,17 @@ async def update_profile(
 ) -> ProfileResponse:
     await service.update_profile(user=context.user, display_name=payload.display_name)
     return await profile_response(context, service)
+
+
+@router.delete("/profile", response_model=MessageResponse)
+async def close_profile(
+    context: Annotated[AuthContext, Depends(get_auth_context)],
+    service: Annotated[AccountService, Depends(get_account_service)],
+    response: Response,
+) -> MessageResponse:
+    await service.close_account(context)
+    response.delete_cookie(REFRESH_COOKIE, path="/api/v1/auth")
+    return MessageResponse(message="账号已注销")
 
 
 @router.get("/sessions", response_model=list[SessionResponse])

@@ -2,18 +2,23 @@ import asyncio
 import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager, suppress
+from uuid import UUID
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from redis.asyncio import Redis
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from app.api.v1.router import api_router
 from app.core.config import Settings, get_settings
 from app.core.exceptions import register_exception_handlers
 from app.core.logging import configure_logging
-from app.core.middleware import RequestContextMiddleware
+from app.core.middleware import RequestContextMiddleware, SecurityMiddleware
+from app.core.rate_limits import RequestLimiter
 from app.db.session import create_database_engine, create_session_factory
+from app.models.identity import User, UserSession, UserStatus
+from app.repositories.identity import session_is_active
 from app.services.notifications import NotificationDeliveryCoordinator
 from app.services.realtime import (
     InMemoryChatMessageLimiter,
@@ -40,7 +45,30 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.redis = (
         Redis.from_url(settings.redis_url, decode_responses=True) if settings.redis_url else None
     )
-    app.state.realtime_hub = RealtimeHub()
+    app.state.request_limiter = RequestLimiter(app.state.redis)
+
+    async def active_realtime_session(user_id: UUID, session_id: UUID) -> bool:
+        factory = app.state.session_factory
+        if factory is None:
+            return False
+        async with factory() as session:
+            row = (
+                await session.execute(
+                    select(User, UserSession)
+                    .join(UserSession, UserSession.user_id == User.id)
+                    .where(User.id == user_id, UserSession.id == session_id)
+                )
+            ).one_or_none()
+            return bool(
+                row
+                and row[0].status == UserStatus.ACTIVE
+                and row[0].deleted_at is None
+                and session_is_active(row[1])
+            )
+
+    app.state.realtime_hub = RealtimeHub(
+        active_realtime_session if app.state.session_factory is not None else None
+    )
     app.state.realtime_publisher = RedisRealtimePublisher(app.state.realtime_hub, app.state.redis)
     app.state.chat_message_limiter = RedisChatMessageLimiter(
         app.state.redis, InMemoryChatMessageLimiter()
@@ -103,6 +131,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         lifespan=lifespan,
     )
     application.state.settings = resolved_settings
+    application.add_middleware(SecurityMiddleware)
     application.add_middleware(RequestContextMiddleware)
     application.add_middleware(
         CORSMiddleware,

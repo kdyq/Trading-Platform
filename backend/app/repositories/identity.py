@@ -1,10 +1,12 @@
 from datetime import UTC, datetime
+from secrets import token_urlsafe
 from typing import Protocol
 from uuid import UUID
 
 from sqlalchemy import delete, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.exceptions import AppError
 from app.models.catalog import Favorite, Product, ProductStatus
 from app.models.identity import (
     CampusAppealStatus,
@@ -15,9 +17,11 @@ from app.models.identity import (
     Role,
     User,
     UserSession,
+    UserStatus,
     user_roles,
 )
-from app.models.trade import CreditLedger, Order
+from app.models.moderation import Report, ReportStatus
+from app.models.trade import CreditLedger, Order, OrderStatus
 
 
 class IdentityRepository(Protocol):
@@ -48,6 +52,8 @@ class IdentityRepository(Protocol):
 
 class AccountRepository(IdentityRepository, Protocol):
     async def update_user(self, user: User) -> None: ...
+
+    async def close_account(self, user_id: UUID, *, at: datetime) -> None: ...
 
     async def profile_counts(self, user_id: UUID) -> tuple[int, int, int, int]: ...
 
@@ -203,6 +209,100 @@ class SqlAlchemyIdentityRepository:
 
     async def update_user(self, user: User) -> None:
         self._session.add(user)
+        await self._session.flush()
+
+    async def close_account(self, user_id: UUID, *, at: datetime) -> None:
+        user = await self._session.scalar(select(User).where(User.id == user_id).with_for_update())
+        if user is None or user.deleted_at is not None or user.status != UserStatus.ACTIVE:
+            raise AppError(status_code=404, code="account_not_found", message="账号不存在")
+        staff_role = await self._session.scalar(
+            select(Role.id)
+            .join(user_roles, user_roles.c.role_id == Role.id)
+            .where(user_roles.c.user_id == user_id, Role.code != "USER")
+            .limit(1)
+        )
+        if staff_role is not None:
+            raise AppError(
+                status_code=409, code="staff_closure_requires_review", message="请先移交管理职责"
+            )
+        open_order = await self._session.scalar(
+            select(Order.id)
+            .where(
+                or_(Order.buyer_id == user_id, Order.seller_id == user_id),
+                Order.status.not_in(
+                    (OrderStatus.COMPLETED, OrderStatus.CANCELLED, OrderStatus.EXPIRED)
+                ),
+            )
+            .limit(1)
+        )
+        open_report = await self._session.scalar(
+            select(Report.id)
+            .where(
+                or_(Report.reporter_id == user_id, Report.subject_user_id == user_id),
+                Report.status.in_(
+                    (ReportStatus.OPEN, ReportStatus.REVIEWING, ReportStatus.APPEALED)
+                ),
+            )
+            .limit(1)
+        )
+        pending_appeal = await self._session.scalar(
+            select(CampusVerificationAppeal.id)
+            .where(
+                CampusVerificationAppeal.user_id == user_id,
+                CampusVerificationAppeal.status == CampusAppealStatus.PENDING,
+            )
+            .limit(1)
+        )
+        if open_order is not None or open_report is not None or pending_appeal is not None:
+            raise AppError(
+                status_code=409, code="account_has_open_cases", message="请先处理未完成事项"
+            )
+        await self._session.execute(
+            update(Product)
+            .where(Product.seller_id == user_id, Product.deleted_at.is_(None))
+            .values(status=ProductStatus.DELETED, deleted_at=at)
+        )
+        await self._session.execute(
+            update(Order)
+            .where(Order.buyer_id == user_id)
+            .values(buyer_display_name_snapshot="已注销用户")
+        )
+        await self._session.execute(
+            update(Order)
+            .where(Order.seller_id == user_id)
+            .values(seller_display_name_snapshot="已注销用户")
+        )
+        await self._session.execute(
+            update(CampusVerification)
+            .where(CampusVerification.user_id == user_id)
+            .values(
+                campus_email=f"closed-{user_id.hex}@invalid.example",
+                status=CampusVerificationStatus.EXPIRED,
+                deleted_at=at,
+            )
+        )
+        await self._session.execute(
+            update(CampusVerificationAppeal)
+            .where(CampusVerificationAppeal.user_id == user_id)
+            .values(retention_until=at)
+        )
+        await self._session.execute(
+            update(UserSession)
+            .where(UserSession.user_id == user_id)
+            .values(revoked_at=at, user_agent=None, ip_address=None)
+        )
+        await self._session.execute(
+            delete(PasswordResetToken).where(PasswordResetToken.user_id == user_id)
+        )
+        user.login_email = None
+        user.login_email_verified_at = None
+        user.username = f"closed_{user_id.hex[:24]}"
+        user.display_name = "已注销用户"
+        user.password_hash = token_urlsafe(48)
+        user.last_login_at = None
+        user.avatar_key = None
+        user.status = UserStatus.DISABLED
+        user.deleted_at = at
         await self._session.flush()
 
     async def profile_counts(self, user_id: UUID) -> tuple[int, int, int, int]:
