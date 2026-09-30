@@ -8,7 +8,6 @@ from uuid import UUID
 
 from playwright.sync_api import sync_playwright
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import create_async_engine
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "backend"))
@@ -16,10 +15,10 @@ sys.path.insert(0, str(ROOT / "backend"))
 from app.core.config import Settings  # noqa: E402
 from app.core.security import TokenManager  # noqa: E402
 from app.db.seed import seed_roles_and_permissions  # noqa: E402
-from app.db.url import database_url_for_sqlalchemy  # noqa: E402
+from browser_db import browser_engine  # noqa: E402
 from scripts.postgres_gate import load_database_url  # noqa: E402
 
-from browser_stage8 import BASE_URL, install_session
+from browser_stage8 import BASE_URL, install_session  # noqa: E402
 
 SUPER_ID = UUID("9a000000-0000-4000-8000-000000000001")
 SUPPORT_ID = UUID("9a000000-0000-4000-8000-000000000002")
@@ -28,16 +27,31 @@ SUPPORT_SESSION = UUID("9a000000-0000-4000-8000-000000000012")
 
 
 async def cleanup() -> None:
-    engine = create_async_engine(database_url_for_sqlalchemy(load_database_url()))
+    engine = browser_engine(load_database_url())
     ids = [SUPER_ID, SUPPORT_ID]
     try:
         async with engine.begin() as connection:
-            await connection.execute(text("DELETE FROM audit_export_jobs WHERE actor_id = ANY(:ids)"), {"ids": ids})
-            await connection.execute(text("DELETE FROM audit_logs WHERE actor_id = ANY(:ids)"), {"ids": ids})
-            await connection.execute(text("DELETE FROM notifications WHERE user_id = ANY(:ids)"), {"ids": ids})
-            await connection.execute(text("DELETE FROM user_roles WHERE user_id = ANY(:ids)"), {"ids": ids})
-            await connection.execute(text("DELETE FROM user_sessions WHERE user_id = ANY(:ids)"), {"ids": ids})
-            await connection.execute(text("DELETE FROM users WHERE id = ANY(:ids)"), {"ids": ids})
+            await connection.execute(
+                text("DELETE FROM audit_export_jobs WHERE actor_id = ANY(:ids)"),
+                {"ids": ids},
+            )
+            await connection.execute(
+                text("DELETE FROM audit_logs WHERE actor_id = ANY(:ids)"), {"ids": ids}
+            )
+            await connection.execute(
+                text("DELETE FROM notifications WHERE user_id = ANY(:ids)"),
+                {"ids": ids},
+            )
+            await connection.execute(
+                text("DELETE FROM user_roles WHERE user_id = ANY(:ids)"), {"ids": ids}
+            )
+            await connection.execute(
+                text("DELETE FROM user_sessions WHERE user_id = ANY(:ids)"),
+                {"ids": ids},
+            )
+            await connection.execute(
+                text("DELETE FROM users WHERE id = ANY(:ids)"), {"ids": ids}
+            )
     finally:
         await engine.dispose()
 
@@ -45,15 +59,27 @@ async def cleanup() -> None:
 async def prepare() -> tuple[dict[UUID, str], str]:
     settings = Settings()
     assert settings.auth_secret_key is not None
-    engine = create_async_engine(database_url_for_sqlalchemy(load_database_url()))
+    engine = browser_engine(load_database_url())
     now = datetime.now(UTC)
     try:
         await cleanup()
         async with engine.begin() as connection:
             await seed_roles_and_permissions(connection)
             for user_id, session_id, role, email, name in (
-                (SUPER_ID, SUPER_SESSION, "SUPER_ADMIN", "stage9-super@example.com", "阶段九管理员"),
-                (SUPPORT_ID, SUPPORT_SESSION, "SUPPORT", "stage9-support@example.com", "阶段九客服"),
+                (
+                    SUPER_ID,
+                    SUPER_SESSION,
+                    "SUPER_ADMIN",
+                    "stage9-super@example.com",
+                    "阶段九管理员",
+                ),
+                (
+                    SUPPORT_ID,
+                    SUPPORT_SESSION,
+                    "SUPPORT",
+                    "stage9-support@example.com",
+                    "阶段九客服",
+                ),
             ):
                 await connection.execute(
                     text(
@@ -96,7 +122,9 @@ async def prepare() -> tuple[dict[UUID, str], str]:
                 user_id=SUPPORT_ID, session_id=SUPPORT_SESSION, authenticated_at=now
             )[0],
         }
-        return tokens, (now + timedelta(minutes=settings.access_token_minutes)).isoformat()
+        return tokens, (
+            now + timedelta(minutes=settings.access_token_minutes)
+        ).isoformat()
     finally:
         await engine.dispose()
 
@@ -111,8 +139,11 @@ def run() -> None:
             super_context = browser.new_context(viewport={"width": 1440, "height": 900})
             install_session(
                 super_context,
-                token=tokens[SUPER_ID], expires=expires, user_id=SUPER_ID,
-                name="阶段九管理员", email="stage9-super@example.com",
+                token=tokens[SUPER_ID],
+                expires=expires,
+                user_id=SUPER_ID,
+                name="阶段九管理员",
+                email="stage9-super@example.com",
             )
             page = super_context.new_page()
             page_errors: list[str] = []
@@ -121,7 +152,9 @@ def run() -> None:
             page.wait_for_load_state("networkidle")
             page.get_by_role("heading", name="运营概览").wait_for()
             page.get_by_text("当前活跃会话").wait_for()
-            page.screenshot(path=str(screenshot_root / "stage9-dashboard.png"), full_page=True)
+            page.screenshot(
+                path=str(screenshot_root / "stage9-dashboard.png"), full_page=True
+            )
             for label, heading in (
                 ("后台人员", "后台人员"),
                 ("用户管理", "用户管理"),
@@ -135,7 +168,9 @@ def run() -> None:
                 page.get_by_role("heading", name=heading).wait_for()
                 assert page.get_by_role("alert").count() == 0
             page.on("dialog", lambda dialog: dialog.accept())
-            page.get_by_role("textbox", name="导出理由").fill("阶段九浏览器导出恢复测试")
+            page.get_by_role("textbox", name="导出理由").fill(
+                "阶段九浏览器导出恢复测试"
+            )
             page.get_by_role("button", name="创建导出").click()
             page.get_by_text("导出已排队").wait_for()
             page.reload()
@@ -145,11 +180,16 @@ def run() -> None:
             page.get_by_text("文件访问已撤销").wait_for()
             assert not page_errors, page_errors
 
-            support_context = browser.new_context(viewport={"width": 375, "height": 812})
+            support_context = browser.new_context(
+                viewport={"width": 375, "height": 812}
+            )
             install_session(
                 support_context,
-                token=tokens[SUPPORT_ID], expires=expires, user_id=SUPPORT_ID,
-                name="阶段九客服", email="stage9-support@example.com",
+                token=tokens[SUPPORT_ID],
+                expires=expires,
+                user_id=SUPPORT_ID,
+                name="阶段九客服",
+                email="stage9-support@example.com",
             )
             support_page = support_context.new_page()
             support_page.goto(f"{BASE_URL}/admin/users")
@@ -157,13 +197,17 @@ def run() -> None:
             support_page.get_by_role("heading", name="用户管理").wait_for()
             assert support_page.get_by_role("link", name="后台人员").count() == 0
             support_page.get_by_text("s***@example.com").first.wait_for()
-            assert support_page.evaluate("document.documentElement.scrollWidth <= window.innerWidth + 1")
+            assert support_page.evaluate(
+                "document.documentElement.scrollWidth <= window.innerWidth + 1"
+            )
             response = support_context.request.get(
-                f"http://127.0.0.1:8000/api/v1/admin/staff",
+                "http://127.0.0.1:8000/api/v1/admin/staff",
                 headers={"Authorization": f"Bearer {tokens[SUPPORT_ID]}"},
             )
             assert response.status == 403
-            support_page.screenshot(path=str(screenshot_root / "stage9-support-mobile.png"), full_page=True)
+            support_page.screenshot(
+                path=str(screenshot_root / "stage9-support-mobile.png"), full_page=True
+            )
             browser.close()
     finally:
         asyncio.run(cleanup())

@@ -9,7 +9,6 @@ from uuid import UUID
 
 from playwright.sync_api import BrowserContext, Route, sync_playwright
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import create_async_engine
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "backend"))
@@ -17,7 +16,7 @@ sys.path.insert(0, str(ROOT / "backend"))
 from app.core.config import Settings  # noqa: E402
 from app.core.security import TokenManager  # noqa: E402
 from app.db.seed import seed_roles_and_permissions  # noqa: E402
-from app.db.url import database_url_for_sqlalchemy  # noqa: E402
+from browser_db import browser_engine  # noqa: E402
 from scripts.postgres_gate import load_database_url  # noqa: E402
 
 BASE_URL = "http://127.0.0.1:5173"
@@ -103,7 +102,7 @@ async def clean(connection, storage_root: Path) -> None:  # type: ignore[no-unty
 async def prepare() -> tuple[dict[UUID, str], str]:
     settings = Settings()
     assert settings.auth_secret_key
-    engine = create_async_engine(database_url_for_sqlalchemy(load_database_url()))
+    engine = browser_engine(load_database_url())
     now = datetime.now(UTC)
     users = (
         (REPORTER_ID, "stage8-reporter@example.com", "阶段八举报人"),
@@ -336,7 +335,7 @@ def run() -> None:
     finally:
 
         async def cleanup() -> None:
-            engine = create_async_engine(database_url_for_sqlalchemy(load_database_url()))
+            engine = browser_engine(load_database_url())
             try:
                 async with engine.begin() as connection:
                     await clean(connection, settings.resolved_private_storage_root)

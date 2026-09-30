@@ -321,6 +321,25 @@ async def _exercise_market_queries(database_url: str) -> None:
             assert await repository.favorite_status(buyer_id, product_id) == (True, 1)
             favorites = await repository.list_favorites(buyer_id)
             assert [item.id for item in favorites] == [product_id]
+            assert favorites[0].image_url == (
+                f"/api/v1/market/product-image-thumbnails/{first_image_id}"
+            )
+            assert favorites[0].image_alt == "第一张"
+            await session.execute(
+                text("UPDATE product_images SET deleted_at = now() WHERE id = :id"),
+                {"id": first_image_id},
+            )
+            favorites = await repository.list_favorites(buyer_id)
+            assert favorites[0].image_url == (
+                f"/api/v1/market/product-image-thumbnails/{second_image_id}"
+            )
+            assert favorites[0].image_alt == "第二张"
+            await session.execute(
+                text("UPDATE product_images SET deleted_at = now() WHERE id = :id"),
+                {"id": second_image_id},
+            )
+            favorites = await repository.list_favorites(buyer_id)
+            assert favorites[0].image_url is None and favorites[0].image_alt is None
             await repository.remove_favorite(buyer_id, product_id)
             assert await repository.favorite_status(buyer_id, product_id) == (False, 0)
 

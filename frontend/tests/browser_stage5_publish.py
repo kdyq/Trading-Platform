@@ -64,10 +64,7 @@ def fulfill_json(route: Route, payload: object, status: int = 200) -> None:
 def run() -> None:
     OUTPUT.mkdir(exist_ok=True)
     with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(
-            executable_path=r"C:\Program Files\Google\Chrome\Application\chrome.exe",
-            headless=True,
-        )
+        browser = playwright.chromium.launch(headless=True)
         for width in (375, 768, 1024, 1440):
             page = browser.new_page(viewport={"width": width, "height": 900})
             console_errors: list[str] = []
@@ -81,7 +78,9 @@ def run() -> None:
             )
             page.on(
                 "response",
-                lambda response: failed_responses.append(f"{response.status} {response.url}")
+                lambda response: failed_responses.append(
+                    f"{response.status} {response.url}"
+                )
                 if response.status >= 400
                 else None,
             )
@@ -94,7 +93,7 @@ def run() -> None:
                         route,
                         {
                             "access_token": "browser-token",
-                            "access_token_expires_at": "2026-09-19T09:00:00Z",
+                            "access_token_expires_at": "2030-09-19T09:00:00Z",
                             "token_type": "bearer",
                             "user": {
                                 "id": USER_ID,
@@ -142,16 +141,21 @@ def run() -> None:
                             "size_bytes": len(PIXEL),
                             "width": 1,
                             "height": 1,
-                            "expires_at": "2026-09-20T08:00:00Z",
+                            "expires_at": "2030-09-20T08:00:00Z",
                             "preview_url": f"/api/v1/product-images/uploads/{UPLOAD_ID}/preview",
                         },
                         201,
                     )
                 elif "/images/" in url:
                     route.fulfill(status=200, content_type="image/png", body=PIXEL)
-                elif url.endswith("/api/v1/seller/products") and request.method == "POST":
+                elif (
+                    url.endswith("/api/v1/seller/products") and request.method == "POST"
+                ):
                     fulfill_json(route, product("draft", 1, False), 201)
-                elif url.endswith(f"/api/v1/seller/products/{PRODUCT_ID}") and request.method == "PATCH":
+                elif (
+                    url.endswith(f"/api/v1/seller/products/{PRODUCT_ID}")
+                    and request.method == "PATCH"
+                ):
                     state["version"] += 1
                     state["with_image"] = True
                     fulfill_json(
@@ -165,7 +169,9 @@ def run() -> None:
                         route,
                         product("pending_review", int(state["version"]), True),
                     )
-                elif url.endswith("/api/v1/seller/products") and request.method == "GET":
+                elif (
+                    url.endswith("/api/v1/seller/products") and request.method == "GET"
+                ):
                     fulfill_json(
                         route,
                         {
@@ -195,12 +201,16 @@ def run() -> None:
                 {"name": "book.png", "mimeType": "image/png", "buffer": PIXEL}
             )
             page.get_by_label("交付说明").fill("工作日傍晚东门自提")
-            page.get_by_label("接受合理议价").check()
+            negotiable = page.get_by_label("接受合理议价")
+            if not negotiable.is_checked():
+                negotiable.click()
             page.get_by_role("button", name="下一步").click()
             page.get_by_role("button", name="提交审核").click()
             page.wait_for_url("**/my-products")
             page.get_by_text("待审核", exact=True).wait_for()
-            assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+            assert page.evaluate(
+                "document.documentElement.scrollWidth <= window.innerWidth"
+            )
             page.screenshot(path=OUTPUT / f"stage5-publish-{width}.png", full_page=True)
             assert not console_errors, console_errors
             assert not failed_responses, failed_responses

@@ -1,6 +1,7 @@
 """Stage 7 two-context order, meeting, completion and review browser gate."""
 
 import asyncio
+import os
 import json
 import sys
 from datetime import UTC, datetime, timedelta
@@ -9,14 +10,13 @@ from uuid import UUID
 
 from playwright.sync_api import BrowserContext, Route, sync_playwright
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import create_async_engine
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "backend"))
 
 from app.core.config import Settings  # noqa: E402
 from app.core.security import TokenManager  # noqa: E402
-from app.db.url import database_url_for_sqlalchemy  # noqa: E402
+from browser_db import browser_engine  # noqa: E402
 
 BASE_URL = "http://127.0.0.1:5173"
 OUTPUT = ROOT / "frontend" / ".tmp"
@@ -69,7 +69,7 @@ async def clean(connection) -> None:  # type: ignore[no-untyped-def]
 async def prepare() -> tuple[str, str, str]:
     settings = Settings()
     assert settings.database_url and settings.auth_secret_key
-    engine = create_async_engine(database_url_for_sqlalchemy(settings.database_url))
+    engine = browser_engine(settings.database_url)
     now = datetime.now(UTC)
     try:
         async with engine.begin() as connection:
@@ -172,7 +172,7 @@ async def prepare() -> tuple[str, str, str]:
 async def cleanup() -> None:
     settings = Settings()
     assert settings.database_url
-    engine = create_async_engine(database_url_for_sqlalchemy(settings.database_url))
+    engine = browser_engine(settings.database_url)
     try:
         async with engine.begin() as connection:
             await clean(connection)
@@ -217,10 +217,7 @@ def run() -> None:
     OUTPUT.mkdir(exist_ok=True)
     try:
         with sync_playwright() as playwright:
-            browser = playwright.chromium.launch(
-                executable_path=r"C:\Program Files\Google\Chrome\Application\chrome.exe",
-                headless=True,
-            )
+            browser = playwright.chromium.launch(headless=True)
             seller_context = browser.new_context(viewport={"width": 390, "height": 844})
             buyer_context = browser.new_context(viewport={"width": 1440, "height": 900})
             install_session(
@@ -313,7 +310,8 @@ def run() -> None:
             buyer_context.close()
             browser.close()
     finally:
-        asyncio.run(cleanup())
+        if not os.getenv("DATABASE_SCHEMA"):
+            asyncio.run(cleanup())
 
 
 if __name__ == "__main__":

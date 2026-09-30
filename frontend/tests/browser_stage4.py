@@ -4,7 +4,7 @@ import base64
 import json
 from pathlib import Path
 
-from playwright.sync_api import sync_playwright
+from playwright.sync_api import expect, sync_playwright
 
 
 OUTPUT = Path(__file__).parents[1] / ".tmp"
@@ -64,8 +64,29 @@ def run() -> None:
         browser = playwright.chromium.launch()
         for width, height in ((375, 812), (768, 1024), (1024, 900), (1440, 1000)):
             page = browser.new_page(viewport={"width": width, "height": height})
+            page.route(
+                "**/api/v1/auth/refresh",
+                lambda route: route.fulfill(
+                    status=401,
+                    content_type="application/json",
+                    body='{"code":"invalid_refresh_token"}',
+                ),
+            )
             console_errors: list[str] = []
             failed_responses: list[str] = []
+            request_failures: list[str] = []
+            page.on(
+                "requestfailed",
+                lambda request: request_failures.append(
+                    f"{request.url} {request.failure}"
+                )
+                if not (
+                    request.failure == "net::ERR_ABORTED"
+                    and request.method == "GET"
+                    and "/api/v1/market/products?" in request.url
+                )
+                else None,
+            )
             page.on(
                 "console",
                 lambda message: console_errors.append(message.text)
@@ -74,14 +95,18 @@ def run() -> None:
             )
             page.on(
                 "response",
-                lambda response: failed_responses.append(f"{response.status} {response.url}")
+                lambda response: failed_responses.append(
+                    f"{response.status} {response.url}"
+                )
                 if response.status >= 400
                 and not (response.status == 401 and "/auth/refresh" in response.url)
                 else None,
             )
             page.goto("http://127.0.0.1:5173/", wait_until="networkidle")
             page.get_by_role("heading", name="闲置好物，换个主人继续发光").wait_for()
-            assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+            assert page.evaluate(
+                "document.documentElement.scrollWidth <= window.innerWidth"
+            )
             page.screenshot(path=OUTPUT / f"stage4-home-{width}.png", full_page=True)
 
             page.goto(
@@ -89,16 +114,18 @@ def run() -> None:
                 wait_until="networkidle",
             )
             page.get_by_role("heading", name="找到今天想带走的好物").wait_for()
-            assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+            assert page.evaluate(
+                "document.documentElement.scrollWidth <= window.innerWidth"
+            )
             if width <= 768:
                 page.get_by_role("button", name="筛选商品").click()
                 dialog = page.get_by_role("dialog", name="筛选商品")
                 dialog.wait_for()
-                assert dialog.locator("#mobile-filter-category").input_value() == "books"
+                expect(dialog.locator("#mobile-filter-category")).to_have_value("books")
                 page.keyboard.press("Escape")
                 assert dialog.count() == 0
             else:
-                assert page.locator("#desktop-filter-category").input_value() == "books"
+                expect(page.locator("#desktop-filter-category")).to_have_value("books")
                 page.locator("#desktop-filter-condition").select_option("like_new")
                 page.get_by_role("button", name="应用筛选").click()
                 page.wait_for_url("**condition=like_new**")
@@ -122,25 +149,44 @@ def run() -> None:
                     body=PIXEL_PNG,
                 ),
             )
-            page.goto(f"http://127.0.0.1:5173/products/{PRODUCT_ID}", wait_until="networkidle")
+            page.route(
+                "**/api/v1/credit/users/*/summary",
+                lambda route: route.fulfill(
+                    status=200,
+                    content_type="application/json",
+                    body='{"level":"trusted","range_label":"良好"}',
+                ),
+            )
+            page.goto(
+                f"http://127.0.0.1:5173/products/{PRODUCT_ID}", wait_until="networkidle"
+            )
             page.get_by_role("heading", name="高等数学教材").wait_for()
-            assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+            assert page.evaluate(
+                "document.documentElement.scrollWidth <= window.innerWidth"
+            )
             gallery = page.locator(".product-gallery-stage")
             gallery.focus()
             page.keyboard.press("ArrowRight")
             box = gallery.bounding_box()
             assert box is not None and abs(box["width"] / box["height"] - 4 / 3) < 0.03
-            page.get_by_role("button", name="联系卖家 / 发起交易").click()
+            page.get_by_role("button", name="联系卖家", exact=True).click()
             page.get_by_role("dialog", name="登录后继续").wait_for()
             page.keyboard.press("Escape")
             page.screenshot(path=OUTPUT / f"task4-detail-{width}.png", full_page=True)
 
-            page.goto("http://127.0.0.1:5173/campus-verification", wait_until="networkidle")
+            page.goto(
+                "http://127.0.0.1:5173/campus-verification", wait_until="networkidle"
+            )
             page.wait_for_url("**/login")
             page.get_by_role("heading", name="登录拾光集市").wait_for()
-            assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
-            page.screenshot(path=OUTPUT / f"stage4-campus-entry-{width}.png", full_page=True)
+            assert page.evaluate(
+                "document.documentElement.scrollWidth <= window.innerWidth"
+            )
+            page.screenshot(
+                path=OUTPUT / f"stage4-campus-entry-{width}.png", full_page=True
+            )
             assert not console_errors, console_errors
+            assert not request_failures, request_failures
             assert not failed_responses, failed_responses
             page.close()
         browser.close()

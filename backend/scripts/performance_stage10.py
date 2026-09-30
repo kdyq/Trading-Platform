@@ -153,6 +153,14 @@ async def prepare(database_url: str, schema: str) -> dict[str, str | list[str]]:
             )
             await connection.execute(
                 text(
+                    "INSERT INTO product_images "
+                    "(id, product_id, object_key, thumbnail_object_key, alt_text) "
+                    "SELECT gen_random_uuid(), id, 'perf/' || id || '.png', "
+                    "'perf/' || id || '.webp', '性能测试商品图片' FROM products"
+                )
+            )
+            await connection.execute(
+                text(
                     "UPDATE products SET status='pending_review' WHERE id IN "
                     "(SELECT id FROM products ORDER BY published_at LIMIT 100)"
                 )
@@ -312,7 +320,7 @@ async def benchmark_mixed(
     }
 
 
-async def run(output: Path) -> None:
+async def run(state: dict[str, object]) -> None:
     database_url = load_database_url()
     require_project_database(database_url)
     schema = f"test_gate_{uuid4().hex}"
@@ -326,6 +334,7 @@ async def run(output: Path) -> None:
     memory_started = working_set_bytes()
     try:
         fixture = await prepare(database_url, schema)
+        state["stage"] = "measurement"
         async with admin_engine.begin() as connection:
             for table in (
                 "products",
@@ -495,6 +504,7 @@ async def run(output: Path) -> None:
                     "order_idempotency_lookup": ("order-create", "FROM orders", None),
                 }
                 plans: dict[str, list[str]] = {}
+                state["stage"] = "query-plans"
                 explain_connection = await asyncpg.connect(asyncpg_url(database_url))
                 try:
                     await explain_connection.execute(f'SET search_path TO "{schema}"')
@@ -504,7 +514,11 @@ async def run(output: Path) -> None:
                                 (sql, params)
                                 for sql, params in captured[scenario_name]
                                 if marker in sql
-                                and (ordered is None or ("ORDER BY" in sql) == ordered)
+                                and (
+                                    ordered is None
+                                    or (not sql.lstrip().upper().startswith("SELECT COUNT("))
+                                    == ordered
+                                )
                             ),
                             None,
                         )
@@ -525,6 +539,7 @@ async def run(output: Path) -> None:
             "sample": {
                 "products": 2000,
                 "pending_products": 100,
+                "product_image_rows": 2000,
                 "messages": 500,
                 "buyers": 1,
                 "sellers": 1,
@@ -550,20 +565,47 @@ async def run(output: Path) -> None:
             "scenarios": scenarios,
             "explain_actual_endpoint_queries": plans,
         }
-        output.parent.mkdir(parents=True, exist_ok=True)
-        output.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-        print(json.dumps({"output": str(output), "scenarios": scenarios}, ensure_ascii=False))
+        state.update(report)
+        state["stage"] = "cleanup"
     finally:
         if previous_schema is None:
             os.environ.pop("DATABASE_SCHEMA", None)
         else:
             os.environ["DATABASE_SCHEMA"] = previous_schema
-        async with admin_engine.begin() as connection:
-            await connection.execute(text(f'DROP SCHEMA IF EXISTS "{schema}" CASCADE'))
-        await admin_engine.dispose()
+        try:
+            async with admin_engine.begin() as connection:
+                await connection.execute(text(f'DROP SCHEMA IF EXISTS "{schema}" CASCADE'))
+        finally:
+            await admin_engine.dispose()
+
+
+def write_result(output: Path, state: dict[str, object]) -> None:
+    output.parent.mkdir(parents=True, exist_ok=True)
+    temporary = output.with_suffix(output.suffix + ".tmp")
+    temporary.write_text(json.dumps(state, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    temporary.replace(output)
+
+
+async def tracked_run(output: Path) -> None:
+    state: dict[str, object] = {
+        "timestamp_utc": datetime.now(UTC).isoformat(),
+        "status": "running",
+        "stage": "preflight",
+    }
+    write_result(output, state)
+    try:
+        await run(state)
+    except BaseException as exc:
+        state.update(status="failed", error=f"{type(exc).__name__}: {exc}", exit_code=1)
+        write_result(output, state)
+        raise
+    state.update(status="passed", stage="complete", exit_code=0)
+    state["completed_at_utc"] = datetime.now(UTC).isoformat()
+    write_result(output, state)
+    print(json.dumps({"output": str(output), "scenarios": state["scenarios"]}, ensure_ascii=False))
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
-    asyncio.run(run(parser.parse_args().output))
+    asyncio.run(tracked_run(parser.parse_args().output))

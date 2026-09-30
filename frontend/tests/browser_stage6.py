@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import os
 import sys
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -9,14 +10,13 @@ from uuid import UUID
 
 from playwright.sync_api import BrowserContext, Route, sync_playwright
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import create_async_engine
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "backend"))
 
 from app.core.config import Settings  # noqa: E402
 from app.core.security import TokenManager  # noqa: E402
-from app.db.url import database_url_for_sqlalchemy  # noqa: E402
+from browser_db import browser_engine  # noqa: E402
 
 BASE_URL = "http://127.0.0.1:5173"
 OUTPUT = ROOT / "frontend" / ".tmp"
@@ -78,7 +78,7 @@ async def clean(connection) -> None:  # type: ignore[no-untyped-def]
 async def prepare() -> tuple[str, str, str]:
     settings = Settings()
     assert settings.database_url and settings.auth_secret_key
-    engine = create_async_engine(database_url_for_sqlalchemy(settings.database_url))
+    engine = browser_engine(settings.database_url)
     now = datetime.now(UTC)
     try:
         async with engine.begin() as connection:
@@ -181,7 +181,7 @@ async def prepare() -> tuple[str, str, str]:
 async def cleanup() -> None:
     settings = Settings()
     assert settings.database_url
-    engine = create_async_engine(database_url_for_sqlalchemy(settings.database_url))
+    engine = browser_engine(settings.database_url)
     try:
         async with engine.begin() as connection:
             await clean(connection)
@@ -229,10 +229,7 @@ def run() -> None:
     OUTPUT.mkdir(exist_ok=True)
     try:
         with sync_playwright() as playwright:
-            browser = playwright.chromium.launch(
-                executable_path=r"C:\Program Files\Google\Chrome\Application\chrome.exe",
-                headless=True,
-            )
+            browser = playwright.chromium.launch(headless=True)
             seller_context = browser.new_context(viewport={"width": 375, "height": 850})
             buyer_context = browser.new_context(viewport={"width": 1440, "height": 900})
             install_session(
@@ -262,7 +259,7 @@ def run() -> None:
             buyer_page.goto(
                 f"{BASE_URL}/products/{PRODUCT_ID}", wait_until="networkidle"
             )
-            buyer_page.locator(".product-main-actions .ui-button-primary").click()
+            buyer_page.get_by_role("button", name="联系卖家", exact=True).click()
             buyer_page.wait_for_url("**/messages/**")
             conversation_id = buyer_page.url.rsplit("/", 1)[-1]
 
@@ -330,8 +327,12 @@ def run() -> None:
             buyer_page.locator(".message-row:not(.mine)").last.get_by_role(
                 "button", name="举报"
             ).click()
-            buyer_page.locator(".report-card select").select_option("spam")
-            buyer_page.locator(".report-card textarea").fill("重复引导离开平台")
+            buyer_page.get_by_role("dialog", name="举报这条消息").get_by_label(
+                "举报原因"
+            ).select_option("spam")
+            buyer_page.get_by_role("dialog", name="举报这条消息").get_by_label(
+                "事实说明"
+            ).fill("重复引导离开平台")
             buyer_page.get_by_role("button", name="提交举报").click()
             buyer_page.get_by_text("举报已受理").wait_for()
 
@@ -379,7 +380,8 @@ def run() -> None:
             buyer_context.close()
             browser.close()
     finally:
-        asyncio.run(cleanup())
+        if not os.getenv("DATABASE_SCHEMA"):
+            asyncio.run(cleanup())
 
 
 if __name__ == "__main__":

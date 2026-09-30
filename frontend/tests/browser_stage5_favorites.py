@@ -60,16 +60,15 @@ def detail() -> dict[str, object]:
 
 
 def fulfill_json(route: Route, payload: object) -> None:
-    route.fulfill(content_type="application/json", body=json.dumps(payload, ensure_ascii=False))
+    route.fulfill(
+        content_type="application/json", body=json.dumps(payload, ensure_ascii=False)
+    )
 
 
 def run() -> None:
     OUTPUT.mkdir(exist_ok=True)
     with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(
-            executable_path=r"C:\Program Files\Google\Chrome\Application\chrome.exe",
-            headless=True,
-        )
+        browser = playwright.chromium.launch(headless=True)
         for width in (375, 768, 1024, 1440):
             page = browser.new_page(viewport={"width": width, "height": 900})
             favorited = {"value": False}
@@ -83,7 +82,9 @@ def run() -> None:
             )
             page.on(
                 "response",
-                lambda response: failed_responses.append(f"{response.status} {response.url}")
+                lambda response: failed_responses.append(
+                    f"{response.status} {response.url}"
+                )
                 if response.status >= 400
                 else None,
             )
@@ -96,7 +97,7 @@ def run() -> None:
                         route,
                         {
                             "access_token": "browser-token",
-                            "access_token_expires_at": "2026-09-19T09:00:00Z",
+                            "access_token_expires_at": "2030-09-19T09:00:00Z",
                             "token_type": "bearer",
                             "user": {
                                 "id": "11111111-1111-4111-8111-111111111111",
@@ -111,12 +112,23 @@ def run() -> None:
                     fulfill_json(route, detail())
                 elif "/api/v1/market/product-images/" in url:
                     route.fulfill(content_type="image/png", body=PIXEL)
-                elif url.endswith(f"/api/v1/favorites/{PRODUCT_ID}") and request.method == "GET":
+                elif "/api/v1/credit/users/" in url and url.endswith("/summary"):
+                    fulfill_json(route, {"level": "trusted", "range_label": "良好"})
+                elif (
+                    url.endswith(f"/api/v1/favorites/{PRODUCT_ID}")
+                    and request.method == "GET"
+                ):
                     fulfill_json(
                         route,
-                        {"favorited": favorited["value"], "favorite_count": 3 if favorited["value"] else 2},
+                        {
+                            "favorited": favorited["value"],
+                            "favorite_count": 3 if favorited["value"] else 2,
+                        },
                     )
-                elif url.endswith(f"/api/v1/favorites/{PRODUCT_ID}") and request.method == "PUT":
+                elif (
+                    url.endswith(f"/api/v1/favorites/{PRODUCT_ID}")
+                    and request.method == "PUT"
+                ):
                     favorited["value"] = True
                     fulfill_json(route, {"favorited": True, "favorite_count": 3})
                 elif url.endswith("/api/v1/favorites"):
@@ -134,8 +146,12 @@ def run() -> None:
             page.goto(f"{BASE_URL}/favorites", wait_until="networkidle")
             page.get_by_role("heading", name="我的收藏").wait_for()
             page.get_by_text("高等数学教材", exact=True).wait_for()
-            assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
-            page.screenshot(path=OUTPUT / f"stage5-favorites-{width}.png", full_page=True)
+            assert page.evaluate(
+                "document.documentElement.scrollWidth <= window.innerWidth"
+            )
+            page.screenshot(
+                path=OUTPUT / f"stage5-favorites-{width}.png", full_page=True
+            )
             assert not console_errors, console_errors
             assert not failed_responses, failed_responses
             page.close()

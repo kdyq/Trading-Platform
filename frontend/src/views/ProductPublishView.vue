@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 import { getCampusStatus } from '../api/campus'
@@ -38,6 +38,7 @@ const uploading = ref(false)
 const errorMessage = ref('')
 const successMessage = ref('')
 let autoSaveTimer: number | undefined
+let applyingProduct = false
 
 const form = reactive({
   title: '',
@@ -84,39 +85,45 @@ function inputPayload(): SellerProductInput {
 }
 
 async function applyProduct(product: SellerProduct) {
-  productId.value = product.id
-  version.value = product.version
-  Object.assign(form, {
-    title: product.title,
-    description: product.description,
-    price: product.price,
-    originalPrice: product.original_price ?? '',
-    categoryId: product.category_id,
-    campusId: product.campus_id,
-    condition: product.condition,
-    isNegotiable: product.is_negotiable,
-    deliveryNotes: product.delivery_notes ?? '',
-  })
-  images.value = await Promise.all(
-    product.images.map(async (image) => {
-      let previewUrl = ''
-      if (auth.accessToken) {
-        try {
-          previewUrl = URL.createObjectURL(
-            await getSellerProductImage(auth.accessToken, image.thumbnail_url),
-          )
-        } catch {
-          previewUrl = ''
+  applyingProduct = true
+  try {
+    productId.value = product.id
+    version.value = product.version
+    Object.assign(form, {
+      title: product.title,
+      description: product.description,
+      price: product.price,
+      originalPrice: product.original_price ?? '',
+      categoryId: product.category_id,
+      campusId: product.campus_id,
+      condition: product.condition,
+      isNegotiable: product.is_negotiable,
+      deliveryNotes: product.delivery_notes ?? '',
+    })
+    images.value = await Promise.all(
+      product.images.map(async (image) => {
+        let previewUrl = ''
+        if (auth.accessToken) {
+          try {
+            previewUrl = URL.createObjectURL(
+              await getSellerProductImage(auth.accessToken, image.thumbnail_url),
+            )
+          } catch {
+            previewUrl = ''
+          }
         }
-      }
-      return {
-        kind: 'existing' as const,
-        id: image.id,
-        previewUrl,
-        name: image.alt_text ?? '商品图片',
-      }
-    }),
-  )
+        return {
+          kind: 'existing' as const,
+          id: image.id,
+          previewUrl,
+          name: image.alt_text ?? '商品图片',
+        }
+      }),
+    )
+    await nextTick()
+  } finally {
+    applyingProduct = false
+  }
 }
 
 function storeLocal() {
@@ -140,6 +147,7 @@ function restoreLocal() {
 
 async function saveDraft(showFeedback = true) {
   if (!auth.accessToken || !form.categoryId || !form.campusId || saving.value) return false
+  window.clearTimeout(autoSaveTimer)
   saving.value = true
   errorMessage.value = ''
   try {
@@ -231,8 +239,9 @@ async function submitProduct() {
 }
 
 watch(
-  [form, step, images],
+  [form, images],
   () => {
+    if (applyingProduct) return
     storeLocal()
     window.clearTimeout(autoSaveTimer)
     if (productId.value) {
@@ -241,6 +250,8 @@ watch(
   },
   { deep: true },
 )
+
+watch(step, storeLocal)
 
 onMounted(async () => {
   if (!auth.accessToken) {

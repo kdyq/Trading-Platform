@@ -125,6 +125,7 @@ class SellerProductService:
             raise self._transition_error()
         await self._validate_complete(owner_id, product)
         product.status = ProductStatus.PENDING_REVIEW
+        product.updated_at = datetime.now(UTC)
         await self.repository.flush()
         return self._response(product)
 
@@ -138,6 +139,7 @@ class SellerProductService:
         if product.status != ProductStatus.PENDING_REVIEW:
             raise self._transition_error()
         product.status = ProductStatus.DRAFT
+        product.updated_at = datetime.now(UTC)
         await self.repository.flush()
         return self._response(product)
 
@@ -149,6 +151,7 @@ class SellerProductService:
         if product.status not in {ProductStatus.ON_SALE, ProductStatus.RESERVED}:
             raise self._transition_error()
         product.status = ProductStatus.HIDDEN
+        product.updated_at = datetime.now(UTC)
         await self.repository.flush()
         return self._response(product)
 
@@ -163,6 +166,7 @@ class SellerProductService:
             raise self._transition_error()
         product.status = ProductStatus.SOLD
         product.sold_at = datetime.now(UTC)
+        product.updated_at = product.sold_at
         await self.repository.flush()
         return self._response(product)
 

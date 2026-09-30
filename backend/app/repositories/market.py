@@ -1,11 +1,11 @@
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Protocol
 from uuid import UUID
 
-from sqlalchemy import ColumnElement, Select, delete, exists, func, or_, select
+from sqlalchemy import ColumnElement, Select, String, cast, delete, exists, func, or_, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -49,6 +49,8 @@ class PublicProductRecord:
     is_negotiable: bool
     view_count: int
     favorite_count: int
+    image_url: str | None = field(default=None, kw_only=True)
+    image_alt: str | None = field(default=None, kw_only=True)
 
 
 @dataclass(frozen=True)
@@ -162,6 +164,17 @@ class SqlAlchemyMarketRepository:
             .correlate(Product)
             .scalar_subquery()
         )
+        first_image = (
+            select(ProductImage.id)
+            .where(ProductImage.product_id == Product.id, ProductImage.deleted_at.is_(None))
+            .order_by(ProductImage.display_order, ProductImage.id)
+            .limit(1)
+            .correlate(Product)
+        )
+        image_url = first_image.with_only_columns(
+            func.concat("/api/v1/market/product-image-thumbnails/", cast(ProductImage.id, String))
+        ).scalar_subquery()
+        image_alt = first_image.with_only_columns(ProductImage.alt_text).scalar_subquery()
         return (
             select(
                 Product.id,
@@ -182,6 +195,8 @@ class SqlAlchemyMarketRepository:
                 Product.is_negotiable,
                 Product.view_count,
                 favorite_count.label("favorite_count"),
+                image_url.label("image_url"),
+                image_alt.label("image_alt"),
             )
             .join(Campus, Campus.id == Product.campus_id)
             .join(School, School.id == Campus.school_id)
