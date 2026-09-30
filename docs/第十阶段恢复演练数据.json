@@ -1,0 +1,34 @@
+{
+  "timestamp_utc": "2026-09-29T08:39:52.072156+00:00",
+  "target": "disposable test_gate_* schema and non-production object",
+  "backup_seconds": 3.69,
+  "restore_seconds": 0.54,
+  "database_dump_bytes": 168788,
+  "object_sha256": {
+    "products/recovery-object.bin": "5d22e1f2a1707b87e59cf02fb2b2fbfcf6d6fafa1b69076534dd4b8414eb0318",
+    "products/recovery-thumb.bin": "997bb66d30b0a0f73f0624155083ad56f5e840f1f9ff72e8baa23311bf227002"
+  },
+  "before": {
+    "migration_version": "4c8d27a1e903",
+    "users": 1,
+    "products": 1,
+    "images": 1,
+    "categories": 8,
+    "object_keys": [
+      "products/recovery-object.bin",
+      "products/recovery-thumb.bin"
+    ]
+  },
+  "after": {
+    "migration_version": "4c8d27a1e903",
+    "users": 1,
+    "products": 1,
+    "images": 1,
+    "categories": 8,
+    "object_keys": [
+      "products/recovery-object.bin",
+      "products/recovery-thumb.bin"
+    ]
+  },
+  "verified": true
+}

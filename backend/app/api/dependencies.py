@@ -299,6 +299,7 @@ def get_moderation_service(
             settings.resolved_private_storage_root,
             max_bytes=settings.report_evidence_max_bytes,
         ),
+        settings,
     )
 
 

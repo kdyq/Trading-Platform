@@ -7,6 +7,7 @@ from fastapi.responses import FileResponse
 from app.api.dependencies import get_seller_product_service, get_settings_from_request
 from app.api.v1.routes.auth import get_auth_context
 from app.core.config import Settings
+from app.core.feature_switches import require_publishing
 from app.schemas.seller_products import (
     ProductTransitionRequest,
     SellerProductCreate,
@@ -26,7 +27,9 @@ async def create_product(
     payload: SellerProductCreate,
     context: Annotated[AuthContext, Depends(get_auth_context)],
     service: Annotated[SellerProductService, Depends(get_seller_product_service)],
+    settings: Annotated[Settings, Depends(get_settings_from_request)],
 ) -> SellerProductResponse:
+    require_publishing(settings)
     return await service.create(context.user.id, payload)
 
 
@@ -97,7 +100,9 @@ async def submit_product(
     payload: ProductTransitionRequest,
     context: Annotated[AuthContext, Depends(get_auth_context)],
     service: Annotated[SellerProductService, Depends(get_seller_product_service)],
+    settings: Annotated[Settings, Depends(get_settings_from_request)],
 ) -> SellerProductResponse:
+    require_publishing(settings)
     return await service.submit(context.user.id, product_id, payload.version)
 
 

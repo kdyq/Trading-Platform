@@ -2,7 +2,9 @@ from datetime import UTC, datetime
 from hashlib import sha256
 from uuid import UUID
 
+from app.core.config import Settings
 from app.core.exceptions import AppError
+from app.core.feature_switches import require_publishing
 from app.models.catalog import Product, ProductImage, ProductStatus
 from app.models.moderation import ModerationAction, Report, ReportAppeal, ReportStatus
 from app.models.trade import CreditEventType
@@ -31,11 +33,13 @@ class ModerationService:
         credit_repository: SqlAlchemyCreditRepository | None = None,
         report_repository: SqlAlchemyReportRepository | None = None,
         report_storage: PrivateReportStorage | None = None,
+        settings: Settings | None = None,
     ) -> None:
         self.repository = repository
         self.credit_repository = credit_repository
         self.report_repository = report_repository
         self.report_storage = report_storage
+        self.settings = settings
 
     async def require_reviewer(self, user_id: UUID) -> None:
         if not await self.repository.has_role(user_id, self.REVIEW_ROLES):
@@ -64,6 +68,8 @@ class ModerationService:
         public_note: str,
         request_id: str,
     ) -> ModerationProductSummary:
+        if action in {"approve", "restore"} and self.settings is not None:
+            require_publishing(self.settings)
         await self.require_reviewer(moderator_id)
         product = await self.repository.get_product(product_id, lock=True)
         if product is None:
@@ -467,7 +473,10 @@ class ModerationService:
                 report, ModerationAction.HIDE
             )
             if product_blocker is None:
-                await self.repository.restore_report_product(report)
+                await self.repository.restore_report_product(
+                    report,
+                    publish_allowed=self.settings is None or self.settings.publishing_enabled,
+                )
             else:
                 await self.repository.set_product_moderation_source(report, product_blocker)
             if report.subject_user_id is not None:

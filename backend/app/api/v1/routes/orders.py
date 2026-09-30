@@ -3,8 +3,10 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
 
-from app.api.dependencies import get_order_service
+from app.api.dependencies import get_order_service, get_settings_from_request
 from app.api.v1.routes.auth import get_auth_context
+from app.core.config import Settings
+from app.core.feature_switches import require_trading
 from app.models.trade import OrderStatus
 from app.schemas.orders import (
     MeetingProposalCreate,
@@ -30,7 +32,9 @@ async def create_order(
     payload: OrderCreate,
     context: Annotated[AuthContext, Depends(get_auth_context)],
     service: Annotated[OrderService, Depends(get_order_service)],
+    settings: Annotated[Settings, Depends(get_settings_from_request)],
 ) -> OrderResponse:
+    require_trading(settings)
     return await service.create(
         user_id=context.user.id,
         campus_status=context.campus_verification_status,

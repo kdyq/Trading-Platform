@@ -32,6 +32,8 @@ class Settings(BaseSettings):
         default=None, validation_alias="AUTH_VERIFICATION_SECRET"
     )
     registration_enabled: bool = Field(default=True, validation_alias="AUTH_REGISTRATION_ENABLED")
+    publishing_enabled: bool = Field(default=True, validation_alias="PUBLISHING_ENABLED")
+    trading_enabled: bool = Field(default=True, validation_alias="TRADING_ENABLED")
     user_agreement_version: str = Field(
         default="development-placeholder", validation_alias="AUTH_USER_AGREEMENT_VERSION"
     )

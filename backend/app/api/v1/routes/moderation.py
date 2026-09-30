@@ -9,6 +9,7 @@ from app.api.v1.routes.admin import get_admin_service
 from app.api.v1.routes.auth import get_auth_context
 from app.core.config import Settings
 from app.core.exceptions import AppError
+from app.core.feature_switches import require_publishing
 from app.models.catalog import ProductStatus
 from app.models.moderation import ReportStatus
 from app.schemas.moderation import (
@@ -52,7 +53,10 @@ async def decide_product(
     context: Annotated[AuthContext, Depends(get_auth_context)],
     service: Annotated[ModerationService, Depends(get_moderation_service)],
     admin: Annotated[AdminService, Depends(get_admin_service)],
+    settings: Annotated[Settings, Depends(get_settings_from_request)],
 ) -> ModerationProductSummary:
+    if payload.action in {"approve", "restore"}:
+        require_publishing(settings)
     if payload.action in {"hide", "restore"}:
         if payload.confirm_target != product_id:
             raise AppError(

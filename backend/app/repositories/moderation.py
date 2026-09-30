@@ -238,7 +238,7 @@ class SqlAlchemyModerationRepository:
         product.moderation_public_note = report.public_result
         product.moderation_source_report_id = report.id
 
-    async def restore_report_product(self, report: Report) -> None:
+    async def restore_report_product(self, report: Report, *, publish_allowed: bool = True) -> None:
         if report.target_type != ModerationTargetType.PRODUCT:
             return
         product = await self.get_product(report.target_id, lock=True)
@@ -254,11 +254,15 @@ class SqlAlchemyModerationRepository:
             restored = ProductStatus.PENDING_REVIEW
         if restored != ProductStatus.ON_SALE:
             restored = ProductStatus.PENDING_REVIEW
-        product.status = restored
-        product.hidden_from_status = None
+        if not publish_allowed and restored == ProductStatus.ON_SALE:
+            product.status = ProductStatus.HIDDEN
+            product.moderation_public_note = "申诉成立；发布暂停期间商品暂不恢复展示"
+        else:
+            product.status = restored
+            product.hidden_from_status = None
+            product.moderation_public_note = report.public_result
         product.moderation_source_report_id = None
         product.moderation_reason_code = "penalty_reversed"
-        product.moderation_public_note = report.public_result
 
     async def set_product_moderation_source(self, report: Report, report_id: UUID) -> None:
         if report.target_type != ModerationTargetType.PRODUCT:
