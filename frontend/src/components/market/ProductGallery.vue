@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { API_BASE_URL } from '../../api/client'
 
 export interface GalleryImage {
   url: string | null
@@ -41,7 +42,11 @@ function markFailed(index: number) {
     >
       <img
         v-if="safeImages[selected]?.url && !failed.has(selected)"
-        :src="safeImages[selected]?.url ?? ''"
+        :src="
+          safeImages[selected]?.url?.startsWith('/')
+            ? `${API_BASE_URL}${safeImages[selected]?.url}`
+            : (safeImages[selected]?.url ?? '')
+        "
         :alt="safeImages[selected]?.alt"
         width="960"
         height="720"
@@ -49,8 +54,8 @@ function markFailed(index: number) {
         @error="markFailed(selected)"
       />
       <div v-else class="product-gallery-fallback">
-        <span>图片暂未开放</span>
-        <small>商品图片将在发布功能上线后显示</small>
+        <span>暂无可展示图片</span>
+        <small>可联系卖家确认物品状态</small>
       </div>
       <span v-if="safeImages.length > 1" class="gallery-count">
         {{ selected + 1 }} / {{ safeImages.length }}

@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import { useAuthStore } from '../stores/auth'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -13,11 +14,6 @@ const router = createRouter({
           path: 'products/:id',
           name: 'product-detail',
           component: () => import('../views/ProductDetailView.vue'),
-        },
-        {
-          path: 'design-system',
-          name: 'design-system',
-          component: () => import('../views/ComponentDemoView.vue'),
         },
         { path: 'login', name: 'login', component: () => import('../views/LoginView.vue') },
         {
@@ -138,6 +134,42 @@ const router = createRouter({
     },
   ],
   scrollBehavior: () => ({ top: 0 }),
+})
+
+const privatePages = new Set([
+  'account',
+  'campus-verification',
+  'my-products',
+  'product-create',
+  'product-edit',
+  'favorites',
+  'messages',
+  'notifications',
+  'reports',
+  'report-appeal',
+  'orders',
+  'order-detail',
+])
+
+router.beforeEach((to) => {
+  const auth = useAuthStore()
+  if ((privatePages.has(String(to.name)) || to.path.startsWith('/admin')) && !auth.user) {
+    return { name: 'login', query: { next: to.fullPath } }
+  }
+  if (
+    auth.user?.must_change_password &&
+    (privatePages.has(String(to.name)) || to.path.startsWith('/admin')) &&
+    to.name !== 'account'
+  ) {
+    return { name: 'account' }
+  }
+  if (
+    auth.user?.status === 'suspended' &&
+    (privatePages.has(String(to.name)) || to.path.startsWith('/admin')) &&
+    !['account', 'notifications', 'report-appeal'].includes(String(to.name))
+  ) {
+    return { name: 'notifications' }
+  }
 })
 
 export default router

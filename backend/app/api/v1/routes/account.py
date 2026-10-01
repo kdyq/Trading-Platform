@@ -7,7 +7,7 @@ from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.api.dependencies import get_account_service
-from app.api.v1.routes.auth import REFRESH_COOKIE, get_auth_context
+from app.api.v1.routes.auth import REFRESH_COOKIE, get_account_recovery_context, get_auth_context
 from app.core.config import Settings
 from app.core.exceptions import AppError
 from app.core.security import PasswordManager, TokenManager
@@ -132,7 +132,7 @@ async def reset_password(
 @router.post("/password-change", response_model=MessageResponse)
 async def change_password(
     payload: PasswordChangeRequest,
-    context: Annotated[AuthContext, Depends(get_auth_context)],
+    context: Annotated[AuthContext, Depends(get_account_recovery_context)],
     service: Annotated[AccountService, Depends(get_account_service)],
 ) -> MessageResponse:
     await service.change_password(
@@ -145,7 +145,7 @@ async def change_password(
 
 @router.get("/profile", response_model=ProfileResponse)
 async def get_profile(
-    context: Annotated[AuthContext, Depends(get_auth_context)],
+    context: Annotated[AuthContext, Depends(get_account_recovery_context)],
     service: Annotated[AccountService, Depends(get_account_service)],
 ) -> ProfileResponse:
     return await profile_response(context, service)
@@ -174,7 +174,7 @@ async def close_profile(
 
 @router.get("/sessions", response_model=list[SessionResponse])
 async def list_sessions(
-    context: Annotated[AuthContext, Depends(get_auth_context)],
+    context: Annotated[AuthContext, Depends(get_account_recovery_context)],
     service: Annotated[AccountService, Depends(get_account_service)],
 ) -> list[SessionResponse]:
     sessions = await service.sessions(context.user.id)
@@ -195,7 +195,7 @@ async def list_sessions(
 @router.delete("/sessions/{session_id}", response_model=MessageResponse)
 async def revoke_session(
     session_id: UUID,
-    context: Annotated[AuthContext, Depends(get_auth_context)],
+    context: Annotated[AuthContext, Depends(get_account_recovery_context)],
     service: Annotated[AccountService, Depends(get_account_service)],
 ) -> MessageResponse:
     await service.revoke_session(context=context, session_id=session_id)

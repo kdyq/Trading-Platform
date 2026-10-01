@@ -10,6 +10,7 @@ from PIL import Image, ImageOps, UnidentifiedImageError
 
 from app.core.exceptions import AppError
 from app.models.catalog import ProductImageUpload
+from app.models.identity import UserStatus
 from app.repositories.product_images import ProductImageUploadRepository
 from app.services.product_storage import ObjectStorage
 
@@ -127,6 +128,11 @@ class ProductImageUploadService:
         claimed_media_type: str | None,
         content: bytes,
     ) -> ProductImageUpload:
+        owner = await self.repository.lock_owner(owner_id)
+        if owner is None or owner.deleted_at is not None or owner.status != UserStatus.ACTIVE:
+            raise AppError(
+                status_code=403, code="account_unavailable", message="账户当前不可上传图片"
+            )
         if await self.repository.count_temporary(owner_id) >= self.max_uploads:
             raise AppError(
                 status_code=409, code="too_many_image_uploads", message="待处理图片数量已达上限"

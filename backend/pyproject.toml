@@ -1,12 +1,3 @@
-[tool.pytest.ini_options]
-addopts = "-q"
-testpaths = ["tests"]
-filterwarnings = [
-    "error",
-    "ignore:Using `httpx` with `starlette.testclient` is deprecated:starlette.exceptions.StarletteDeprecationWarning",
-    "ignore:The anyio.abc.BlockingPortal alias is deprecated:DeprecationWarning",
-]
-
 [tool.ruff]
 target-version = "py312"
 line-length = 100

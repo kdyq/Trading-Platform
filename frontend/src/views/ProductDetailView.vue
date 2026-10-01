@@ -157,10 +157,6 @@ async function toggleFavorite() {
     gate.value = 'login'
     return
   }
-  if (auth.user.campus_verification_status !== 'verified') {
-    gate.value = 'verification'
-    return
-  }
   if (!auth.accessToken || favoriteBusy.value) return
   favoriteBusy.value = true
   try {
@@ -374,7 +370,11 @@ onUnmounted(() => {
             </div>
             <div>
               <strong class="num">
-                {{ product.seller.average_rating ?? '暂无' }}
+                {{
+                  product.seller.average_rating === null
+                    ? '暂无'
+                    : Number(product.seller.average_rating).toFixed(1)
+                }}
               </strong>
               <span>平均评分</span>
             </div>
@@ -396,6 +396,8 @@ onUnmounted(() => {
             :price="item.price"
             :campus="item.campus_name"
             :department="item.seller_name"
+            :image-url="item.image_url"
+            :image-alt="item.image_alt ?? item.title"
             :condition="conditionLabels[item.condition]"
             :published-at="
               item.published_at ? new Date(item.published_at).toLocaleDateString('zh-CN') : '待上架'

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { RouterLink, useRouter } from 'vue-router'
+import { RouterLink, useRoute, useRouter } from 'vue-router'
 
 import { ApiError } from '../api/client'
 import { useAuthStore } from '../stores/auth'
@@ -11,13 +11,24 @@ const busy = ref(false)
 const errorMessage = ref('')
 const auth = useAuthStore()
 const router = useRouter()
+const route = useRoute()
+
+function returnPath() {
+  const value = route.query.next ?? route.query.redirect
+  if (typeof value !== 'string' || !value.startsWith('/') || value.startsWith('//')) return '/'
+  if (value.includes('\\') || [...value].some((char) => char.charCodeAt(0) < 32)) return '/'
+  const url = new URL(value, window.location.origin)
+  if (url.origin !== window.location.origin || ['/login', '/register'].includes(url.pathname))
+    return '/'
+  return `${url.pathname}${url.search}${url.hash}`
+}
 
 async function submit() {
   busy.value = true
   errorMessage.value = ''
   try {
     await auth.login(email.value, password.value)
-    await router.push(auth.user?.must_change_password ? '/account' : '/')
+    await router.push(auth.user?.must_change_password ? '/account' : returnPath())
   } catch (error) {
     errorMessage.value = error instanceof ApiError ? error.message : '登录失败，请稍后重试'
   } finally {

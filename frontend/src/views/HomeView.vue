@@ -151,7 +151,7 @@ onUnmounted(() => {
         <template v-else>
           <p>摊位等你来</p>
           <h2>等待第一件校园好物</h2>
-          <span>当前没有公开商品，发布功能将在下一阶段开放。</span>
+          <span>还没有在售好物，完成校园认证后即可发布闲置。</span>
         </template>
       </article>
     </section>
@@ -226,7 +226,7 @@ onUnmounted(() => {
       </div>
       <div v-else class="market-empty market-reveal">
         <h3>第一件好物还没摆上来</h3>
-        <p>公共市场目前没有在售商品。你可以先看看分类，商品发布将在下一阶段开放。</p>
+        <p>集市正在等待第一件好物。完成校园认证后，就能让闲置在校园里继续发光。</p>
         <RouterLink class="button button-ghost" to="/market">查看市场空态</RouterLink>
       </div>
     </section>

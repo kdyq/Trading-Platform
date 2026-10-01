@@ -29,6 +29,7 @@ export interface SellerProduct {
   is_negotiable: boolean
   delivery_notes: string | null
   status: string
+  appeal_report_id?: string | null
   version: number
   updated_at: string
   images: SellerProductImage[]
@@ -110,13 +111,14 @@ export function transitionSellerProduct(
   })
 }
 
-export function uploadProductImage(accessToken: string, file: File) {
+export function uploadProductImage(accessToken: string, file: File, signal?: AbortSignal) {
   const form = new FormData()
   form.set('image', file)
   return requestJson<ProductImageUpload>('/api/v1/product-images/uploads', {
     method: 'POST',
     accessToken,
     body: form,
+    signal,
     acceptedStatuses: [201],
   })
 }

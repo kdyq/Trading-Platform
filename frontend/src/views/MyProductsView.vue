@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 
 import { ApiError } from '../api/client'
@@ -67,6 +67,8 @@ onMounted(async () => {
     loading.value = false
   }
 })
+
+onBeforeUnmount(() => Object.values(imagePreviews.value).forEach((url) => URL.revokeObjectURL(url)))
 </script>
 
 <template>
@@ -100,12 +102,20 @@ onMounted(async () => {
         </div>
         <div class="seller-product-actions">
           <RouterLink
-            v-if="['draft', 'rejected', 'hidden'].includes(product.status)"
+            v-if="
+              !product.appeal_report_id && ['draft', 'rejected', 'hidden'].includes(product.status)
+            "
             class="button button-secondary"
             :to="`/sell/${product.id}`"
           >
             继续编辑
           </RouterLink>
+          <RouterLink
+            v-if="product.appeal_report_id"
+            class="button button-secondary"
+            :to="`/appeals/${product.appeal_report_id}`"
+            >处罚申诉</RouterLink
+          >
           <button
             v-if="product.status === 'pending_review'"
             class="button button-ghost"

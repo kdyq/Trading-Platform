@@ -91,6 +91,7 @@ class SellerProductService:
         self, owner_id: UUID, product_id: UUID, payload: SellerProductUpdate
     ) -> SellerProductResponse:
         product = await self._owned(owner_id, product_id, for_update=True)
+        self._require_no_report_penalty(product)
         self._require_version(product, payload.version)
         if product.status not in EDITABLE_STATUSES:
             raise AppError(
@@ -114,6 +115,7 @@ class SellerProductService:
 
     async def submit(self, owner_id: UUID, product_id: UUID, version: int) -> SellerProductResponse:
         product = await self._owned(owner_id, product_id, for_update=True)
+        self._require_no_report_penalty(product)
         if product.status == ProductStatus.PENDING_REVIEW:
             return self._response(product)
         self._require_version(product, version)
@@ -338,6 +340,15 @@ class SellerProductService:
         )
 
     @staticmethod
+    def _require_no_report_penalty(product: Product) -> None:
+        if product.moderation_source_report_id is not None:
+            raise AppError(
+                status_code=409,
+                code="report_appeal_required",
+                message="举报处罚中的商品需经申诉复核后恢复",
+            )
+
+    @staticmethod
     def _response(product: Product) -> SellerProductResponse:
         images = sorted(
             (image for image in product.images if image.deleted_at is None),
@@ -355,6 +366,7 @@ class SellerProductService:
             is_negotiable=product.is_negotiable,
             delivery_notes=product.delivery_notes,
             status=product.status.value,
+            appeal_report_id=product.moderation_source_report_id,
             version=product.version,
             updated_at=product.updated_at,
             images=[

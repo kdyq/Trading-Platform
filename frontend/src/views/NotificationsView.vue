@@ -47,8 +47,12 @@ async function load() {
 
 async function markRead(item: NotificationItem) {
   if (!auth.accessToken || item.read_at) return
-  const updated = await readNotification(auth.accessToken, item.id)
-  Object.assign(item, updated)
+  try {
+    const updated = await readNotification(auth.accessToken, item.id)
+    Object.assign(item, updated)
+  } catch (caught) {
+    error.value = caught instanceof Error ? caught.message : '标为已读失败'
+  }
 }
 
 async function markAllRead() {

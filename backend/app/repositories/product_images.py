@@ -7,9 +7,12 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.catalog import ProductImageUpload, ProductImageUploadStatus
+from app.models.identity import User
 
 
 class ProductImageUploadRepository(Protocol):
+    async def lock_owner(self, owner_id: UUID) -> User | None: ...
+
     async def count_temporary(self, owner_id: UUID) -> int: ...
 
     async def create(
@@ -45,6 +48,17 @@ class ProductImageUploadRepository(Protocol):
 class SqlAlchemyProductImageUploadRepository:
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
+
+    async def lock_owner(self, owner_id: UUID) -> User | None:
+        return cast(
+            User | None,
+            await self.session.scalar(
+                select(User)
+                .where(User.id == owner_id)
+                .with_for_update()
+                .execution_options(populate_existing=True)
+            ),
+        )
 
     async def count_temporary(self, owner_id: UUID) -> int:
         return int(

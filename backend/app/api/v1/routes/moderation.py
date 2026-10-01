@@ -6,7 +6,7 @@ from fastapi.responses import FileResponse
 
 from app.api.dependencies import get_moderation_service, get_settings_from_request
 from app.api.v1.routes.admin import get_admin_service
-from app.api.v1.routes.auth import get_auth_context
+from app.api.v1.routes.auth import get_account_recovery_context, get_auth_context
 from app.core.config import Settings
 from app.core.exceptions import AppError
 from app.core.feature_switches import require_publishing
@@ -143,7 +143,7 @@ async def decide_report(
 async def create_report_appeal(
     report_id: UUID,
     payload: ReportAppealCreate,
-    context: Annotated[AuthContext, Depends(get_auth_context)],
+    context: Annotated[AuthContext, Depends(get_account_recovery_context)],
     service: Annotated[ModerationService, Depends(get_moderation_service)],
 ) -> ReportAppealResponse:
     return await service.create_appeal(
@@ -156,7 +156,7 @@ async def create_report_appeal(
 )
 async def upload_appeal_evidence(
     appeal_id: UUID,
-    context: Annotated[AuthContext, Depends(get_auth_context)],
+    context: Annotated[AuthContext, Depends(get_account_recovery_context)],
     service: Annotated[ModerationService, Depends(get_moderation_service)],
     evidence: Annotated[UploadFile, File()],
     settings: Annotated[Settings, Depends(get_settings_from_request)],
@@ -176,7 +176,7 @@ async def upload_appeal_evidence(
 async def download_appeal_evidence(
     appeal_id: UUID,
     evidence_id: UUID,
-    context: Annotated[AuthContext, Depends(get_auth_context)],
+    context: Annotated[AuthContext, Depends(get_account_recovery_context)],
     service: Annotated[ModerationService, Depends(get_moderation_service)],
 ) -> FileResponse:
     item = await service.download_appeal_evidence(

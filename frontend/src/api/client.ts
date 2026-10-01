@@ -22,13 +22,18 @@ interface RequestOptions {
   accessToken?: string | null
   acceptedStatuses?: number[]
   signal?: AbortSignal
+  timeoutMs?: number
 }
 
 export async function requestJson<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const controller = new AbortController()
-  const timeout = window.setTimeout(() => controller.abort(), 5000)
+  const timeout = window.setTimeout(
+    () => controller.abort(),
+    options.timeoutMs ?? (options.body instanceof FormData ? 120000 : 10000),
+  )
   const abortFromCaller = () => controller.abort()
   options.signal?.addEventListener('abort', abortFromCaller, { once: true })
+  if (options.signal?.aborted) controller.abort()
 
   try {
     const response = await fetch(`${API_BASE_URL}${path}`, {

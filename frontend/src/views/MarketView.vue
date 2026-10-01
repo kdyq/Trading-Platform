@@ -235,7 +235,7 @@ onUnmounted(() => {
         />
       </aside>
 
-      <main class="market-result-list" aria-live="polite" :aria-busy="loading">
+      <section class="market-result-list" aria-live="polite" :aria-busy="loading">
         <p class="result-count">
           共找到 <strong class="num">{{ total }}</strong> 件商品
         </p>
@@ -293,7 +293,7 @@ onUnmounted(() => {
             下一页
           </UiButton>
         </nav>
-      </main>
+      </section>
     </div>
 
     <UiDialog :open="filterOpen" title="筛选商品" @close="filterOpen = false">

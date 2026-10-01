@@ -128,7 +128,7 @@ class AuthService:
             raise invalid_credentials()
         if not self._password_manager.verify(user.password_hash, password):
             raise invalid_credentials()
-        if user.status != UserStatus.ACTIVE:
+        if user.status not in {UserStatus.ACTIVE, UserStatus.SUSPENDED}:
             raise invalid_credentials()
         now = datetime.now(UTC)
         user.last_login_at = now
@@ -153,7 +153,7 @@ class AuthService:
             await self._repository.revoke_session(current, at=now)
             raise invalid_refresh_token()
         user = await self._repository.get_user(current.user_id)
-        if user is None or user.status != UserStatus.ACTIVE:
+        if user is None or user.status not in {UserStatus.ACTIVE, UserStatus.SUSPENDED}:
             await self._repository.revoke_family(current.family_id, at=now)
             raise invalid_refresh_token()
 
@@ -180,7 +180,9 @@ class AuthService:
         campus_status = await self._repository.get_campus_verification_status(user.id)
         return AuthResult(user, access, access_expires_at, refresh, campus_status)
 
-    async def authenticate(self, access_token: str) -> AuthContext:
+    async def authenticate(
+        self, access_token: str, *, allow_suspended: bool = False
+    ) -> AuthContext:
         claims = self._token_manager.decode_access_token(access_token)
         session = await self._repository.get_session(claims.session_id)
         user = await self._repository.get_user(claims.user_id)
@@ -189,10 +191,16 @@ class AuthService:
             or user is None
             or session.user_id != user.id
             or not session_is_active(session)
-            or user.status != UserStatus.ACTIVE
+            or user.status not in {UserStatus.ACTIVE, UserStatus.SUSPENDED}
         ):
             raise AppError(
                 status_code=401, code="invalid_access_token", message="登录状态无效或已过期"
+            )
+        if user.status == UserStatus.SUSPENDED and not allow_suspended:
+            raise AppError(
+                status_code=403,
+                code="account_suspended",
+                message="账户已暂停，请通过通知中的入口申诉",
             )
         account_status = await self._repository.get_campus_verification_status(user.id)
         campus_status = await self._repository.get_business_campus_status(user.id)

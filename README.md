@@ -1,71 +1,129 @@
 # 拾光集市
 
-面向校内学生的二手交易平台。当前完成工程骨架、质量基线和 PostgreSQL 数据底座的前置准备；业务功能按 `开发文档.md` 的阶段门禁逐步实现。
+面向校园的二手交易平台，让闲置物品在同学之间继续使用。支持校园身份认证、商品审核、站内沟通、线下面交、双向评价，以及举报申诉和后台运营。
 
-## 环境要求
+![拾光集市首页](docs/images/home.png)
 
-- Node.js 24 与 Corepack
-- pnpm 9.15.9
-- `D:\python\virtual\fastapi-env` 中的 Python 3.12
-- 本机 PostgreSQL 18 与 Redis
+## 功能
 
-本机实测版本、复检命令和故障处理见 `docs/环境说明.md`。
+| 使用场景 | 能力 |
+| --- | --- |
+| 发现闲置 | 分类、关键词检索、价格筛选、排序、商品详情与收藏 |
+| 发布商品 | 分步填写、账户独立的本地草稿、多图上传、审核、撤回与重新提交 |
+| 校园身份 | 普通邮箱注册，校园邮箱单独认证，私密材料人工申诉 |
+| 沟通与交易 | WebSocket 站内聊天、通知、同校区订单、双方确认面交安排、交付与收货 |
+| 信任与治理 | 交易双方评价、信用记录、举报证据、处罚、独立人员复核申诉 |
+| 运营后台 | 用户与内容管理、校园认证审核、目录配置、工作人员权限、审计和异步导出 |
+| 账户与隐私 | 密码找回、会话撤销、隐私说明和账号注销 |
 
-## 初始化
+当前使用线下交接和付款，不接入在线支付。市场公开展示在售商品；创建交易要求买卖双方有有效的同校区认证。后台工作人员权限属于平台范围，多校运营隔离方案见部署文档。
 
-```powershell
-Copy-Item '.env.example' 'backend\.env'
+## 页面预览
+
+以下图片来自本地实际运行的应用，内容为数据库中的演示数据；商品配图是演示插画。
+
+![商品市场](docs/images/market.png)
+
+<details>
+<summary>查看聊天、交易、手机页面和运营后台</summary>
+
+![站内聊天](docs/images/messages.png)
+
+![订单与双向评价](docs/images/order.png)
+
+![手机商品市场](docs/images/market-mobile.png)
+
+![运营概览](docs/images/admin.png)
+
+</details>
+
+## 技术架构
+
+| 部分 | 技术 |
+| --- | --- |
+| 前端 | Vue 3、TypeScript、Vite、Pinia、Vue Router、GSAP |
+| 后端 | Python 3.12、FastAPI、Pydantic、SQLAlchemy 2、Alembic |
+| 数据与任务 | PostgreSQL、Redis、常驻审计导出 worker |
+| 文件 | 本地对象存储、受控商品图接口、带权限校验的私密下载 |
+| 质量检查 | Ruff、严格 mypy、vue-tsc、ESLint、Prettier |
+
+```mermaid
+flowchart LR
+  U[浏览器] --> V[Vue 应用]
+  V -->|HTTP / WebSocket| A[FastAPI]
+  A --> P[(PostgreSQL)]
+  A --> R[(Redis)]
+  A --> F[公开商品图 / 私密材料]
+  W[审计导出 worker] --> P
+  W --> F
 ```
 
-编辑 `backend/.env`，只在本机填写项目数据库连接和 Redis 地址。该文件被 Git 忽略，不要把真实连接 URL、密码或令牌复制到文档、终端输出或提交中。
-
-安装或核对依赖：
-
-```powershell
-& '.\scripts\check.ps1' -Install
+```text
+backend/        API、领域服务、数据库迁移与运营命令
+frontend/       页面、组件、状态与 API 客户端
+docs/           项目规则、部署与运维方案、页面截图
+scripts/        项目质量检查入口
+.env.example    配置模板，不含真实凭据
 ```
 
-`-Install` 会复用固定 Python 环境，并只在 `frontend` 安装 pnpm 依赖，不创建新虚拟环境。
+## 本地运行
 
-## 本地启动
+准备 Python 3.12、Node.js 24、pnpm 9.15.9、PostgreSQL 和 Redis。创建专用数据库 `campus_trading_platform`，保持 Redis 可连接。可以使用已有 Python 环境；下文的 `python` 应指向该环境。
 
-打开两个 PowerShell 终端。
-
-后端：
+在项目根目录复制配置模板，填写本地数据库、Redis、SMTP 和认证配置：
 
 ```powershell
-Set-Location 'backend'
-& 'D:\python\virtual\fastapi-env\Scripts\python.exe' -m uvicorn app.main:app --reload
+Copy-Item '.env.example' 'backend/.env'
 ```
 
-前端：
+`.env` 已被 Git 忽略。API、迁移和 worker 必须使用同一有效配置；不要提交连接凭据或把密码写在命令行中。
+
+在 `backend` 目录初始化并启动：
 
 ```powershell
-Set-Location 'frontend'
-pnpm dev
+python -m pip install -r requirements.txt
+python -m alembic upgrade head
+python -m app.db.seed
+python -m app.db.bootstrap_super_admin
+python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-访问 `http://127.0.0.1:5173`。前端开发服务器会把 `/api` 代理到 `http://127.0.0.1:8000`。后端 OpenAPI 位于 `http://127.0.0.1:8000/docs`。
+种子命令用于首次安装角色、权限和默认分类。超级管理员初始化命令通过无回显提示接收密码，创建用户名 `guo`，首次登录必须改密；已有账号会拒绝覆盖。学校、校区和校园邮箱域名需要由运营方先录入，详见 [后端说明](backend/README.md)。
 
-## 完整检查
+另外启动常驻 worker：
 
 ```powershell
-& '.\scripts\check.ps1'
+python -m app.workers.audit_export
 ```
 
-该命令依次执行后端 Ruff 格式检查、Ruff Lint、严格 mypy、pytest，以及前端类型检查、ESLint、Prettier、Vitest 和生产构建；任一步失败都会停止。
-
-第二阶段数据库门禁使用独立临时 schema，不触碰 `public` 中的数据：
+在 `frontend` 目录启动前端：
 
 ```powershell
-& '.\scripts\check.ps1' -Postgres
+pnpm install --frozen-lockfile
+pnpm dev --host 127.0.0.1
 ```
 
-该模式在上述检查后执行真实 PostgreSQL 迁移往返、Alembic 漂移检查、事务与领域约束测试，并重复运行分类种子验证幂等性。连接只从进程环境或被 Git 忽略的项目 MCP 配置读取，不会回显。
+访问 [本地应用](http://127.0.0.1:5173)。开发服务器代理 `/api` 和 WebSocket 到后端。开发模式 OpenAPI 位于 [API 文档](http://127.0.0.1:8000/docs)。
 
-## 当前边界
+## 质量与维护
 
-- 首页、登录、管理端和 404 当前是工程外壳，不包含伪造的商品或账号数据。
-- 存活检查 `/api/v1/health/live` 不依赖外部服务。
-- 就绪检查 `/api/v1/health/ready` 会分别报告 PostgreSQL 与 Redis 状态。
-- 数据库结构变更统一使用 Alembic，不以 MCP 临时操作替代迁移。
+项目根目录的检查脚本执行后端格式、静态检查和严格类型检查，以及前端类型、Lint、格式和生产构建：
+
+```powershell
+./scripts/check.ps1 -Python '你的 Python 环境/python.exe'
+```
+
+收尾验收通过 113 项后端测试、17 项实际 PostgreSQL 检查和 48 项前端测试；真实浏览器覆盖交易、治理、账户恢复与运营流程，并完成 375、768、1024、1440 像素下共 124 次页面布局检查。验证码与密码找回使用真实 Redis、数据库流程及本地邮件投递接收器，外部 SMTP 需在正式环境另行验收。
+
+按项目收尾要求，开发过程文档与验收脚本已移除，数据库演示数据保留；验收使用的后台演示账号已停用。后续功能修改应补充对应回归测试并重新运行实际浏览器旅程。
+
+## 项目文档
+
+- [后端介绍与运行](backend/README.md)
+- [前端介绍与运行](frontend/README.md)
+- [账户规则](docs/账户规则.md) · [隐私与账号注销](docs/隐私与账号注销说明.md)
+- [图片存储策略](docs/商品图片存储策略.md) · [运维手册](docs/运维手册.md)
+- [部署方案](docs/部署方案.md) · [发布流程](docs/发布流程.md)
+- [监控与安全运维](docs/监控与安全运维.md) · [容量与多校路线](docs/容量与多校路线.md)
+
+部署文档是待落地的设计方案，包含上线条件、回滚、备份和多校路线。当前交付为可本地运行的项目；生产基础设施、域名和正式运营资料需要在上线前落实。

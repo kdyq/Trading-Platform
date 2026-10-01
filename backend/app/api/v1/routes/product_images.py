@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 from typing import Annotated
 from uuid import UUID
 
@@ -66,7 +67,7 @@ async def preview_product_image(
     settings: Annotated[Settings, Depends(get_settings_from_request)],
 ) -> FileResponse:
     upload = await repository.get_owned_temporary(context.user.id, upload_id)
-    if upload is None:
+    if upload is None or upload.expires_at <= datetime.now(UTC):
         raise AppError(status_code=404, code="image_upload_not_found", message="待处理图片不存在")
     path = LocalObjectStorage(settings.resolved_public_product_storage_root).path_for(
         upload.thumbnail_key

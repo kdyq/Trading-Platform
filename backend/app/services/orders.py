@@ -7,7 +7,7 @@ from uuid import UUID, uuid4
 
 from app.core.exceptions import AppError
 from app.models.catalog import ProductStatus
-from app.models.identity import CampusVerificationStatus
+from app.models.identity import CampusVerificationStatus, UserStatus
 from app.models.moderation import ModerationTargetType, Report, ReportEvent, ReportStatus
 from app.models.trade import (
     CreditEventType,
@@ -65,7 +65,8 @@ class OrderService:
         if existing is not None:
             self._require_same_create(existing, payload)
             return self._response(existing)
-        product = await self.repository.lock_product(payload.product_id)
+        await self.repository.lock_create_participants(user_id, payload.product_id)
+        product = await self.repository.lock_available_product(payload.product_id)
         if product is None or product.status != ProductStatus.ON_SALE:
             raise AppError(
                 status_code=409,
@@ -83,12 +84,27 @@ class OrderService:
                 code="order_campus_mismatch",
                 message="只能购买当前认证校区的商品",
             )
+        seller_campus_id = await self.repository.verified_campus_id(product.seller_id)
+        if seller_campus_id is None or seller_campus_id != product.campus_id:
+            raise AppError(
+                status_code=409,
+                code="order_party_unavailable",
+                message="卖家当前校园身份不可交易",
+            )
         buyer = await self.repository.get_user(user_id)
         seller = await self.repository.get_user(product.seller_id)
         campus_name = await self.repository.campus_name(product.campus_id)
-        if buyer is None or seller is None or campus_name is None:
+        if (
+            buyer is None
+            or seller is None
+            or campus_name is None
+            or buyer.deleted_at is not None
+            or seller.deleted_at is not None
+            or buyer.status != UserStatus.ACTIVE
+            or seller.status != UserStatus.ACTIVE
+        ):
             raise AppError(
-                status_code=404, code="order_party_not_found", message="订单参与方不存在"
+                status_code=409, code="order_party_unavailable", message="订单参与方当前不可交易"
             )
         if payload.conversation_id is not None:
             conversation = await self.repository.member_conversation(

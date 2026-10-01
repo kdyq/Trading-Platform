@@ -163,7 +163,7 @@ async function downloadMaterial() {
     anchor.href = url
     anchor.download = status.value.appeal.original_filename
     anchor.click()
-    URL.revokeObjectURL(url)
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000)
   } catch (error) {
     errorMessage.value = errorText(error)
   }

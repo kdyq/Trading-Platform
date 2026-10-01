@@ -7,11 +7,12 @@ from sqlalchemy import or_, select, text, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.catalog import Product, ProductImage
+from app.models.catalog import Category, Product, ProductImage
 from app.models.identity import (
     Campus,
     CampusVerification,
     CampusVerificationStatus,
+    School,
     User,
 )
 from app.models.messaging import Conversation
@@ -33,6 +34,10 @@ from app.models.trade import (
 
 
 class OrderRepository(Protocol):
+    async def lock_create_participants(self, buyer_id: UUID, product_id: UUID) -> None: ...
+
+    async def lock_available_product(self, product_id: UUID) -> Product | None: ...
+
     async def verified_campus_id(self, user_id: UUID) -> UUID | None: ...
 
     async def get_user(self, user_id: UUID) -> User | None: ...
@@ -141,6 +146,44 @@ class OrderRepository(Protocol):
 class SqlAlchemyOrderRepository:
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
+
+    async def lock_create_participants(self, buyer_id: UUID, product_id: UUID) -> None:
+        seller_id = await self.session.scalar(
+            select(Product.seller_id).where(Product.id == product_id)
+        )
+        ids = {buyer_id} if seller_id is None else {buyer_id, seller_id}
+        # Match account closure's user-before-product order; sort users to avoid reciprocal locks.
+        participants = await self.session.scalars(
+            select(User)
+            .where(User.id.in_(ids))
+            .order_by(User.id)
+            .with_for_update(key_share=True)
+            .execution_options(populate_existing=True)
+        )
+        participants.all()
+
+    async def lock_available_product(self, product_id: UUID) -> Product | None:
+        return cast(
+            Product | None,
+            await self.session.scalar(
+                select(Product)
+                .join(Campus, Campus.id == Product.campus_id)
+                .join(School, School.id == Campus.school_id)
+                .join(Category, Category.id == Product.category_id)
+                .where(
+                    Product.id == product_id,
+                    Product.deleted_at.is_(None),
+                    Campus.deleted_at.is_(None),
+                    Campus.is_active.is_(True),
+                    School.deleted_at.is_(None),
+                    School.is_active.is_(True),
+                    Category.deleted_at.is_(None),
+                    Category.is_active.is_(True),
+                )
+                .with_for_update(of=(Product, Campus, School, Category))
+                .execution_options(populate_existing=True)
+            ),
+        )
 
     async def verified_campus_id(self, user_id: UUID) -> UUID | None:
         now = datetime.now(UTC)

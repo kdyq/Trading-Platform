@@ -175,7 +175,7 @@ onMounted(load)
       <p v-if="reportNotice" role="status">{{ reportNotice }}</p>
 
       <div class="order-detail-layout" :class="{ 'without-side': !hasSide }">
-        <main class="detail-main">
+        <section class="detail-main">
           <section class="detail-panel order-summary-panel">
             <h2>交易概况</h2>
             <dl class="detail-facts">
@@ -334,7 +334,7 @@ onMounted(load)
               </article>
             </div>
           </section>
-        </main>
+        </section>
 
         <aside v-if="hasSide" class="detail-side">
           <section v-if="canCancel" class="detail-panel compact-panel">

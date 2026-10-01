@@ -83,6 +83,12 @@ class ModerationService:
         before = product.status
         now = datetime.now(UTC)
         if action == "approve":
+            if product.moderation_source_report_id is not None:
+                raise AppError(
+                    status_code=409,
+                    code="report_appeal_required",
+                    message="举报处罚中的商品需经申诉复核后恢复",
+                )
             self._require_status(product, {ProductStatus.PENDING_REVIEW})
             product.status = ProductStatus.ON_SALE
             product.published_at = product.published_at or now

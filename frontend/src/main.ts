@@ -15,6 +15,6 @@ app.config.errorHandler = (error) => {
 }
 
 app.use(pinia)
-app.use(router)
 await useAuthStore(pinia).restore()
+app.use(router)
 app.mount('#app')

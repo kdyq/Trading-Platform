@@ -72,6 +72,24 @@ async def get_auth_context(
     if credentials is None or credentials.scheme.lower() != "bearer":
         raise AppError(status_code=401, code="authentication_required", message="请先登录")
     context = await service.authenticate(credentials.credentials)
+    require_password_change_scope(request, context)
+    return context
+
+
+async def get_account_recovery_context(
+    request: Request,
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer)],
+    service: Annotated[AuthService, Depends(get_auth_service)],
+) -> AuthContext:
+    """Opt-in authentication for self-service security, notices and punishment appeals."""
+    if credentials is None or credentials.scheme.lower() != "bearer":
+        raise AppError(status_code=401, code="authentication_required", message="请先登录")
+    context = await service.authenticate(credentials.credentials, allow_suspended=True)
+    require_password_change_scope(request, context)
+    return context
+
+
+def require_password_change_scope(request: Request, context: AuthContext) -> None:
     if context.user.must_change_password:
         allowed = {
             ("GET", "/api/v1/auth/me"),
@@ -86,7 +104,6 @@ async def get_auth_context(
                 code="password_change_required",
                 message="请先修改初始密码",
             )
-    return context
 
 
 @router.post("/email-verifications", response_model=MessageResponse, status_code=202)
@@ -188,7 +205,7 @@ async def logout(
 
 @router.post("/logout-all", response_model=MessageResponse)
 async def logout_all(
-    context: Annotated[AuthContext, Depends(get_auth_context)],
+    context: Annotated[AuthContext, Depends(get_account_recovery_context)],
     service: Annotated[AuthService, Depends(get_auth_service)],
     response: Response,
 ) -> MessageResponse:
@@ -198,7 +215,7 @@ async def logout_all(
 
 
 @router.get("/me", response_model=UserSummary)
-async def me(context: Annotated[AuthContext, Depends(get_auth_context)]) -> UserSummary:
+async def me(context: Annotated[AuthContext, Depends(get_account_recovery_context)]) -> UserSummary:
     return user_summary(
         context.user,
         (context.account_verification_status or context.campus_verification_status).value,

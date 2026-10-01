@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import UiChip from '../ui/UiChip.vue'
+import { API_BASE_URL } from '../../api/client'
 
 export type ProductCardState = 'available' | 'reserved' | 'sold' | 'pending' | 'loading'
 
@@ -47,7 +48,7 @@ withDefaults(
       <div class="product-card-media">
         <img
           v-if="imageUrl"
-          :src="imageUrl"
+          :src="imageUrl.startsWith('/') ? `${API_BASE_URL}${imageUrl}` : imageUrl"
           :alt="imageAlt || title"
           width="640"
           height="480"

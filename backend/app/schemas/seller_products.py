@@ -63,6 +63,7 @@ class SellerProductResponse(BaseModel):
     is_negotiable: bool
     delivery_notes: str | None
     status: str
+    appeal_report_id: UUID | None = None
     version: int
     updated_at: datetime
     images: list[SellerProductImageResponse]

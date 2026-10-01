@@ -5,7 +5,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Query, Response, WebSocket, WebSocketDisconnect
 
 from app.api.dependencies import get_chat_service, get_websocket_ticket_store
-from app.api.v1.routes.auth import get_auth_context
+from app.api.v1.routes.auth import get_account_recovery_context, get_auth_context
 from app.models.identity import CampusVerificationStatus
 from app.schemas.chat import (
     BlockedUsersResponse,
@@ -103,7 +103,7 @@ async def websocket_endpoint(
 
 @router.get("/notifications", response_model=NotificationListResponse)
 async def notifications(
-    context: Annotated[AuthContext, Depends(get_auth_context)],
+    context: Annotated[AuthContext, Depends(get_account_recovery_context)],
     service: Annotated[ChatService, Depends(get_chat_service)],
 ) -> NotificationListResponse:
     return await service.notifications(context.user.id)
@@ -111,7 +111,7 @@ async def notifications(
 
 @router.put("/notifications/read-all", response_model=NotificationReadAllResponse)
 async def read_all_notifications(
-    context: Annotated[AuthContext, Depends(get_auth_context)],
+    context: Annotated[AuthContext, Depends(get_account_recovery_context)],
     service: Annotated[ChatService, Depends(get_chat_service)],
 ) -> NotificationReadAllResponse:
     return NotificationReadAllResponse(
@@ -122,7 +122,7 @@ async def read_all_notifications(
 @router.put("/notifications/{notification_id}/read", response_model=NotificationResponse)
 async def read_notification(
     notification_id: UUID,
-    context: Annotated[AuthContext, Depends(get_auth_context)],
+    context: Annotated[AuthContext, Depends(get_account_recovery_context)],
     service: Annotated[ChatService, Depends(get_chat_service)],
 ) -> NotificationResponse:
     return await service.mark_notification_read(context.user.id, notification_id)
@@ -130,7 +130,7 @@ async def read_notification(
 
 @router.get("/notification-preferences", response_model=NotificationPreferencesResponse)
 async def notification_preferences(
-    context: Annotated[AuthContext, Depends(get_auth_context)],
+    context: Annotated[AuthContext, Depends(get_account_recovery_context)],
     service: Annotated[ChatService, Depends(get_chat_service)],
 ) -> NotificationPreferencesResponse:
     return await service.preferences(context.user.id)
@@ -139,7 +139,7 @@ async def notification_preferences(
 @router.put("/notification-preferences", response_model=NotificationPreferencesResponse)
 async def update_notification_preference(
     payload: NotificationPreferenceUpdate,
-    context: Annotated[AuthContext, Depends(get_auth_context)],
+    context: Annotated[AuthContext, Depends(get_account_recovery_context)],
     service: Annotated[ChatService, Depends(get_chat_service)],
 ) -> NotificationPreferencesResponse:
     return await service.set_preference(context.user.id, payload.category, payload.enabled)

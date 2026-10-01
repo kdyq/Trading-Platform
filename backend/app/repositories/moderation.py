@@ -3,11 +3,13 @@ from datetime import UTC, datetime
 from typing import cast
 from uuid import UUID, uuid4
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.core.exceptions import AppError
+from app.core.permissions import STAFF_ROLES
 from app.models.catalog import Product, ProductStatus
 from app.models.identity import Role, User, UserStatus, user_roles
 from app.models.moderation import (
@@ -42,6 +44,8 @@ class SqlAlchemyModerationRepository:
                 Role.code.in_(roles),
                 Role.deleted_at.is_(None),
                 User.must_change_password.is_(False),
+                User.status == UserStatus.ACTIVE,
+                User.deleted_at.is_(None),
             )
         )
         return bool(count)
@@ -198,6 +202,24 @@ class SqlAlchemyModerationRepository:
         return cast(ReportEvidence | None, await self.session.get(ReportEvidence, evidence_id))
 
     async def suspend_user(self, user_id: UUID, report_id: UUID) -> None:
+        # Share the role/status lock with staff administration, including first-login staff.
+        await self.session.execute(text("SELECT pg_advisory_xact_lock(9350901)"))
+        staff = await self.session.scalar(
+            select(Role.id)
+            .join(user_roles, user_roles.c.role_id == Role.id)
+            .where(
+                user_roles.c.user_id == user_id,
+                Role.code.in_(STAFF_ROLES),
+                Role.deleted_at.is_(None),
+            )
+            .limit(1)
+        )
+        if staff is not None:
+            raise AppError(
+                status_code=403,
+                code="staff_status_requires_staff_administration",
+                message="工作人员的账户状态需由超级管理员在工作人员管理中处理",
+            )
         user = await self.session.get(User, user_id, with_for_update=True)
         if user is not None and user.status == UserStatus.ACTIVE:
             user.status = UserStatus.SUSPENDED
